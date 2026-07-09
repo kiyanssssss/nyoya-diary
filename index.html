@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Our Little Diary — for Princess Nyoya</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --paper:#F7E9E2;
+    --paper-deep:#F0DAD0;
+    --ink:#3B2C34;
+    --ink-soft:#6E5A63;
+    --berry:#8B3A52;
+    --berry-deep:#6E2C40;
+    --gold:#C9A05C;
+    --gold-soft:#E4C98B;
+    --line:#DFC4B8;
+    --white:#FFFBF7;
+
+    --mood-happy:#C9A05C;
+    --mood-sad:#6B7A99;
+    --mood-pouty:#C9707A;
+    --mood-missing:#9A7FB0;
+    --mood-crying:#6FA3A0;
+    --mood-joyful:#B84C6E;
+
+    --tag-important:#B84C6E;
+    --tag-schedule:#6B7A99;
+    --tag-period:#9A5C6B;
+    --tag-quality:#4E8C7C;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  #ny-app{
+    font-family:'Karla',sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 15% 8%, rgba(201,160,92,0.10), transparent 40%),
+      radial-gradient(circle at 85% 92%, rgba(139,58,82,0.08), transparent 45%),
+      var(--paper);
+    width:100%;
+    max-width:460px;
+    margin:0 auto;
+    height:100vh;
+    height:100dvh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+    overflow:hidden;
+  }
+  .ny-display{font-family:'Caveat',cursive;}
+
+  /* Header */
+  .ny-header{
+    padding:22px 20px 16px;
+    text-align:center;
+    position:relative;
+  }
+  .ny-header .eyebrow{
+    font-size:11px;
+    letter-spacing:2.5px;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    font-weight:600;
+  }
+  .ny-header h1{
+    font-family:'Caveat',cursive;
+    font-weight:700;
+    font-size:40px;
+    margin:2px 0 4px;
+    color:var(--berry-deep);
+    line-height:1;
+  }
+  .ny-header .date-line{
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+  .ny-header::after{
+    content:"";
+    display:block;
+    width:60px;
+    height:2px;
+    background:var(--gold);
+    margin:12px auto 0;
+    border-radius:2px;
+    opacity:0.6;
+  }
+
+  /* Tabs container */
+  .ny-content{
+    flex:1;
+    min-height:0;
+    padding:4px 18px 100px;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .ny-tab{display:none;}
+  .ny-tab.active{display:block; animation: fadeIn .25s ease;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+
+  .ny-card{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:16px;
+    margin-bottom:14px;
+    box-shadow:0 2px 10px rgba(107,58,45,0.05);
+  }
+  .ny-section-title{
+    font-family:'Caveat',cursive;
+    font-size:24px;
+    font-weight:700;
+    color:var(--berry-deep);
+    margin:18px 0 8px;
+  }
+  .ny-section-title:first-child{margin-top:6px;}
+
+  /* Mood picker */
+  .mood-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .mood-btn{
+    background:var(--white);
+    border:2px solid var(--line);
+    border-radius:14px;
+    padding:10px 4px 8px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    cursor:pointer;
+    transition:transform .15s ease, border-color .15s ease, background .15s ease;
+    font-family:'Karla',sans-serif;
+  }
+  .mood-btn:active{transform:scale(0.94);}
+  .mood-btn svg{width:34px;height:34px;}
+  .mood-btn span{font-size:11px; color:var(--ink-soft); font-weight:600;}
+  .mood-btn.selected{
+    border-color:var(--sel-color, var(--berry));
+    background:var(--sel-bg, rgba(139,58,82,0.06));
+  }
+  .mood-btn.selected span{color:var(--ink);}
+
+  textarea.ny-input, input.ny-input{
+    width:100%;
+    border:1.5px solid var(--line);
+    border-radius:12px;
+    padding:10px 12px;
+    font-family:'Karla',sans-serif;
+    font-size:16px;
+    background:var(--white);
+    color:var(--ink);
+    resize:vertical;
+  }
+  textarea.ny-input:focus, input.ny-input:focus{
+    outline:none;
+    border-color:var(--berry);
+  }
+  .ny-btn{
+    background:var(--berry);
+    color:var(--white);
+    border:none;
+    border-radius:12px;
+    padding:11px 16px;
+    font-family:'Karla',sans-serif;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+    width:100%;
+    margin-top:10px;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .ny-btn:active{transform:scale(0.98);}
+  .ny-btn:hover{background:var(--berry-deep);}
+  .ny-btn.secondary{
+    background:transparent;
+    color:var(--berry);
+    border:1.5px solid var(--berry);
+  }
+  .ny-btn.secondary:hover{background:rgba(139,58,82,0.06);}
+  .ny-btn.small{width:auto; padding:7px 12px; font-size:12px; margin-top:0;}
+
+  /* Diary entries list */
+  .entry-row{
+    display:flex;
+    gap:10px;
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .entry-row:last-child{border-bottom:none;}
+  .entry-icon{width:30px;height:30px;flex-shrink:0;}
+  .entry-body{flex:1; min-width:0;}
+  .entry-date{font-size:11px; color:var(--ink-soft); font-weight:600; letter-spacing:0.3px;}
+  .entry-text{font-size:13.5px; color:var(--ink); margin-top:2px; line-height:1.4; white-space:pre-wrap; word-wrap:break-word;}
+  .empty-state{
+    text-align:center;
+    padding:26px 10px;
+    color:var(--ink-soft);
+    font-size:13.5px;
+  }
+  .empty-state .ny-display{font-size:22px; display:block; margin-bottom:4px; color:var(--berry-deep);}
+
+  /* Notes / To-do */
+  .todo-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 4px;
+    border-bottom:1px solid var(--line);
+  }
+  .todo-row:last-child{border-bottom:none;}
+  .todo-check{
+    width:22px;height:22px;
+    border-radius:7px;
+    border:2px solid var(--berry);
+    flex-shrink:0;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--white);
+  }
+  .todo-check.checked{background:var(--berry);}
+  .todo-check svg{width:13px;height:13px;display:none;}
+  .todo-check.checked svg{display:block;}
+  .todo-text{flex:1; font-size:14px; word-wrap:break-word;}
+  .todo-text.done{text-decoration:line-through; color:var(--ink-soft);}
+  .todo-del{
+    background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:16px;padding:4px;
+  }
+  .add-row{display:flex; gap:8px; margin-top:12px;}
+  .add-row input{flex:1;}
+
+  /* Calendar */
+  .cal-nav{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .cal-nav button{
+    background:var(--white); border:1.5px solid var(--line); border-radius:10px;
+    width:32px;height:32px; cursor:pointer; font-size:16px; color:var(--berry);
+  }
+  .cal-nav .month-label{
+    font-family:'Caveat',cursive; font-size:24px; font-weight:700; color:var(--berry-deep);
+  }
+  .cal-grid{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    gap:4px;
+    text-align:center;
+  }
+  .cal-dow{font-size:10px; color:var(--ink-soft); font-weight:700; padding-bottom:4px;}
+  .cal-day{
+    aspect-ratio:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    border-radius:10px;
+    font-size:12.5px;
+    cursor:pointer;
+    background:var(--white);
+    border:1.5px solid transparent;
+    position:relative;
+  }
+  .cal-day.empty{visibility:hidden; cursor:default;}
+  .cal-day.today{border-color:var(--gold);}
+  .cal-day.selected{background:var(--berry); color:var(--white);}
+  .cal-dots{display:flex; gap:2px; position:absolute; bottom:4px;}
+  .cal-dots span{width:4px;height:4px;border-radius:50%;}
+
+  .tag-pill{
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:11px; font-weight:700; padding:4px 9px; border-radius:20px;
+    color:var(--white); margin-right:5px; margin-bottom:5px;
+  }
+  .tag-picker{display:flex; flex-wrap:wrap; margin:10px 0;}
+  .tag-choice{
+    font-size:12px; font-weight:600; padding:6px 11px; border-radius:20px;
+    border:1.5px solid var(--line); background:var(--white); color:var(--ink-soft);
+    cursor:pointer; margin-right:6px; margin-bottom:6px;
+  }
+  .tag-choice.on{color:var(--white); border-color:transparent;}
+  .day-note-item{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:8px 0; border-bottom:1px solid var(--line); gap:8px;
+  }
+  .day-note-item:last-child{border-bottom:none;}
+  .day-note-text{font-size:13.5px; flex:1;}
+
+  /* Memory box */
+  .seal-wrap{
+    text-align:center;
+    padding:6px 0 4px;
+  }
+  .seal{
+    width:84px;height:84px;
+    margin:0 auto;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #d98a9e, var(--berry) 70%);
+    box-shadow:0 4px 14px rgba(139,58,82,0.35), inset 0 -3px 6px rgba(0,0,0,0.2);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    transition:transform .2s ease;
+    position:relative;
+  }
+  .seal:active{transform:scale(0.95);}
+  .seal svg{width:34px;height:34px;}
+  .seal.cracked{background:radial-gradient(circle at 35% 30%, var(--gold-soft), var(--gold) 70%);}
+  .memory-title{font-family:'Caveat',cursive; font-size:22px; font-weight:700; color:var(--berry-deep); margin:10px 0 2px;}
+  .memory-sub{font-size:12.5px; color:var(--ink-soft);}
+  .memory-msg{
+    background:var(--paper-deep);
+    border-radius:12px;
+    padding:14px;
+    font-size:14px;
+    line-height:1.5;
+    margin-top:12px;
+    white-space:pre-wrap;
+  }
+  .mb-card{
+    display:flex; align-items:center; gap:12px;
+    padding:12px; border:1px solid var(--line); border-radius:14px; margin-bottom:10px;
+    background:var(--white); cursor:pointer;
+  }
+  .mb-seal-sm{
+    width:40px;height:40px;border-radius:50%; flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .mb-seal-sm.locked{background:radial-gradient(circle at 35% 30%, #d98a9e, var(--berry) 70%);}
+  .mb-seal-sm.unlocked{background:radial-gradient(circle at 35% 30%, var(--gold-soft), var(--gold) 70%);}
+  .mb-seal-sm svg{width:18px;height:18px;}
+  .mb-info{flex:1; min-width:0;}
+  .mb-info .t{font-weight:700; font-size:14px;}
+  .mb-info .d{font-size:11.5px; color:var(--ink-soft);}
+
+  .hearts-fall{position:fixed; inset:0; pointer-events:none; z-index:5; overflow:hidden;}
+  .hearts-fall span{
+    position:absolute; top:-20px; font-size:16px; opacity:0.85;
+    animation:fallDown linear forwards;
+  }
+  @keyframes fallDown{
+    to{transform:translateY(110vh) rotate(340deg); opacity:0;}
+  }
+
+  /* Bottom nav */
+  .ny-nav{
+    position:absolute;
+    bottom:0; left:0; right:0;
+    background:var(--white);
+    border-top:1px solid var(--line);
+    display:flex;
+    padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+    max-width:460px;
+    margin:0 auto;
+  }
+  .nav-btn{
+    flex:1;
+    background:none; border:none;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    color:var(--ink-soft);
+    cursor:pointer;
+    padding:6px 2px;
+    font-family:'Karla',sans-serif;
+    font-size:10.5px;
+    font-weight:700;
+  }
+  .nav-btn svg{width:21px;height:21px;}
+  .nav-btn.active{color:var(--berry);}
+
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(59,44,52,0.45);
+    display:flex; align-items:flex-end; justify-content:center;
+    z-index:20;
+  }
+  .modal-sheet{
+    background:var(--paper);
+    width:100%; max-width:460px;
+    border-radius:20px 20px 0 0;
+    padding:18px 20px calc(20px + env(safe-area-inset-bottom));
+    max-height:80vh;
+    overflow-y:auto;
+  }
+  .modal-sheet h3{font-family:'Caveat',cursive; font-size:24px; margin:0 0 10px; color:var(--berry-deep);}
+  .close-x{
+    position:absolute; top:14px; right:16px; background:none; border:none;
+    font-size:20px; color:var(--ink-soft); cursor:pointer;
+  }
+  .modal-sheet{position:relative;}
+  .loading-msg{text-align:center; padding:40px 10px; color:var(--ink-soft); font-size:13px;}
+  .countdown-chip{
+    display:inline-block; background:var(--paper-deep); color:var(--ink-soft);
+    font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:20px; margin-top:8px;
+  }
+  .author-tag{
+    display:inline-block; font-size:10.5px; font-weight:700; color:var(--berry);
+    background:rgba(139,58,82,0.09); padding:2px 8px; border-radius:20px; margin-left:6px;
+    white-space:nowrap; vertical-align:middle;
+  }
+  .whoami-chip{
+    position:absolute; top:14px; left:14px; display:flex; align-items:center; gap:5px;
+    background:var(--white); border:1.5px solid var(--line); border-radius:20px;
+    padding:4px 10px 4px 8px; font-size:11.5px; font-weight:700; color:var(--berry-deep);
+    cursor:pointer;
+  }
+  .whoami-chip svg{width:13px;height:13px;flex-shrink:0;}
+  .sync-dot{
+    width:7px;height:7px;border-radius:50%; background:#B0B0B0; flex-shrink:0;
+  }
+  .sync-dot.on{background:#4E8C7C;}
+  .conn-banner{
+    background:var(--tag-schedule); color:white; font-size:11.5px; text-align:center;
+    padding:6px 10px; font-weight:600;
+  }
+  .setup-banner{
+    background:var(--berry); color:white; font-size:12px; padding:12px 16px; line-height:1.5;
+  }
+  .setup-banner .code{
+    display:inline-block; background:rgba(255,255,255,0.18); border-radius:8px;
+    padding:4px 10px; font-weight:700; letter-spacing:1px; margin:6px 4px; font-size:14px;
+  }
+  .setup-banner button{
+    background:white; color:var(--berry-deep); border:none; border-radius:8px;
+    padding:6px 12px; font-weight:700; font-size:11.5px; cursor:pointer; margin:6px 4px 0 0;
+  }
+  html, body{
+    margin:0;
+    padding:0;
+    height:100%;
+    overflow:hidden;
+    overscroll-behavior:none;
+    background:var(--paper);
+  }
+</style>
+</head>
+<body>
+<div id="ny-app">
+  <div id="conn-banner" class="conn-banner" style="display:none;"></div>
+  <div class="ny-header">
+    <button id="whoami-chip" class="whoami-chip" title="Tap to switch who's writing">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="whoami-label">Who am I?</span>
+    </button>
+    <button id="owner-lock-btn" title="Owner mode" style="position:absolute; top:14px; right:14px; background:none; border:none; cursor:pointer; color:var(--ink-soft); padding:4px;">
+      <svg id="owner-lock-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+    </button>
+    <div class="eyebrow">for princess nyoya</div>
+    <h1>Our Little Diary</h1>
+    <div class="date-line" id="ny-today-label">—</div>
+  </div>
+
+  <div class="ny-content">
+
+    <!-- DIARY TAB -->
+    <div class="ny-tab active" id="tab-diary">
+      <div class="ny-card">
+        <div class="ny-section-title" style="margin-top:0;">How are you feeling today?</div>
+        <div class="mood-grid" id="mood-grid"></div>
+        <textarea class="ny-input" id="diary-text" rows="3" placeholder="Write a little about today..."></textarea>
+        <button class="ny-btn" id="save-diary-btn">Save today's entry</button>
+      </div>
+      <div class="ny-section-title">Past entries</div>
+      <div class="ny-card" id="diary-list">
+        <div class="loading-msg">Loading entries...</div>
+      </div>
+    </div>
+
+    <!-- NOTES TAB -->
+    <div class="ny-tab" id="tab-notes">
+      <div class="ny-section-title" style="margin-top:0;">Notes &amp; To-dos</div>
+      <div class="ny-card">
+        <div id="todo-list"><div class="loading-msg">Loading...</div></div>
+        <div class="add-row">
+          <input class="ny-input" id="todo-input" placeholder="Add a reminder or to-do..." />
+          <button class="ny-btn small" id="todo-add-btn">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALENDAR TAB -->
+    <div class="ny-tab" id="tab-calendar">
+      <div class="ny-card">
+        <div class="cal-nav">
+          <button id="cal-prev">‹</button>
+          <div class="month-label" id="cal-month-label">—</div>
+          <button id="cal-next">›</button>
+        </div>
+        <div class="cal-grid" id="cal-dow-row"></div>
+        <div class="cal-grid" id="cal-grid" style="margin-top:4px;"></div>
+      </div>
+      <div class="ny-card" id="cal-day-panel" style="display:none;">
+        <div class="ny-section-title" style="margin-top:0;" id="cal-day-title">—</div>
+        <div class="tag-picker" id="cal-tag-picker"></div>
+        <textarea class="ny-input" id="cal-note-input" rows="2" placeholder="Add a note for this day..."></textarea>
+        <button class="ny-btn" id="cal-note-add-btn">Add note</button>
+        <div id="cal-day-notes" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <!-- MEMORY BOX TAB -->
+    <div class="ny-tab" id="tab-box">
+      <div class="ny-card" id="owner-panel" style="display:none;">
+        <div class="ny-section-title" style="margin-top:0;">Owner tools</div>
+        <label style="display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;">Monthly surprise message (unlocks every 12th)</label>
+        <textarea class="ny-input" id="owner-monthly-msg" rows="3"></textarea>
+        <label style="display:block;font-size:12px;color:var(--ink-soft);margin:10px 0 4px;">Add a photo (optional, from your phone or computer)</label>
+        <input type="file" id="owner-photo-input" accept="image/*" class="ny-input" style="padding:8px;" />
+        <div id="owner-photo-preview" style="margin-top:8px;"></div>
+        <button class="ny-btn" id="owner-save-msg-btn" style="margin-top:12px;">Save surprise message</button>
+        <button class="ny-btn secondary" id="owner-export-btn" style="margin-top:8px;">Export her diary as CSV</button>
+      </div>
+      <div class="ny-card" id="monthly-surprise-card">
+        <div class="loading-msg">Loading...</div>
+      </div>
+      <div class="ny-section-title">Memory Box</div>
+      <div class="ny-card">
+        <button class="ny-btn secondary" id="mb-add-toggle">+ Add a memory or gift</button>
+        <div id="mb-add-form" style="display:none; margin-top:12px;">
+          <input class="ny-input" id="mb-title" placeholder="Title" style="margin-bottom:8px;" />
+          <textarea class="ny-input" id="mb-message" rows="3" placeholder="Your message..."></textarea>
+          <label style="display:block; font-size:12px; color:var(--ink-soft); margin:8px 0 4px;">Add a photo (optional)</label>
+          <input type="file" id="mb-photo-input" accept="image/*" class="ny-input" style="padding:8px;" />
+          <div id="mb-photo-preview" style="margin-top:8px;"></div>
+          <label style="display:block; font-size:12px; color:var(--ink-soft); margin:8px 0 4px;">Unlock date (leave empty to unlock now)</label>
+          <input class="ny-input" id="mb-date" type="date" />
+          <button class="ny-btn" id="mb-save-btn">Save to memory box</button>
+        </div>
+      </div>
+      <div id="mb-list"><div class="loading-msg">Loading memory box...</div></div>
+    </div>
+
+  </div>
+
+  <div class="ny-nav">
+    <button class="nav-btn active" data-tab="diary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7.5-4.6-10-9.3C.5 7.8 3 4 6.7 4 9 4 11 5.3 12 7c1-1.7 3-3 5.3-3C21 4 23.5 7.8 22 11.7 19.5 16.4 12 21 12 21z"/></svg>
+      Diary
+    </button>
+    <button class="nav-btn" data-tab="notes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9"/></svg>
+      Notes
+    </button>
+    <button class="nav-btn" data-tab="calendar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+      Calendar
+    </button>
+    <button class="nav-btn" data-tab="box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="13" rx="1"/><path d="M3 8l9-5 9 5M12 12v9M3 8h18"/></svg>
+      Memory Box
+    </button>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ================= FIREBASE SETUP (Google, free) =================
+  // 1. Buka https://console.firebase.google.com -> masuk dengan akun Google kamu -> "Add project" / "Create a project"
+  //    -> kasih nama bebas (mis. "nyoya-diary") -> Continue -> Google Analytics boleh dimatikan -> Create project.
+  // 2. Di sidebar kiri project, cari "Databases & Storage" (atau "Build") -> klik "Firestore Database".
+  // 3. Klik "Create database" / "Add database" -> pilih edisi "Standard" (bukan Enterprise) -> Next.
+  // 4. Pilih lokasi server (bebas, mis. asia-southeast) -> Next.
+  // 5. Di bagian security rules, pilih opsi yang isinya "allow anyone to read and overwrite your data"
+  //    (biasa disebut "test mode") -> Create/Enable.
+  // 6. Klik ikon gerigi ⚙ di sebelah "Project Overview" (pojok kiri atas) -> "Project settings".
+  // 7. Scroll ke bagian "Your apps" -> klik ikon "</>" (Web) -> kasih nama app -> "Register app".
+  // 8. Firebase akan menampilkan kode berisi object "firebaseConfig" -> salin nilai-nilainya, lalu
+  //    ganti semua tulisan PASTE_ME di bawah ini dengan nilai asli dari Firebase kamu.
+  // 9. Simpan file ini, upload ke GitHub, buka lewat link GitHub Pages seperti biasa.
+  //    Selesai — datanya permanen dan sinkron real-time antara kamu berdua.
+  const firebaseConfig = {
+    apiKey: "AIzaSyATgCutd78kMRTPk9W-wxZaN-vp4xelOvM",
+    authDomain: "nyoya-diary.firebaseapp.com",
+    projectId: "nyoya-diary",
+    storageBucket: "nyoya-diary.firebasestorage.app",
+    messagingSenderId: "261530141158",
+    appId: "1:261530141158:web:c60b0e281e85a17c625627"
+  };
+
+  let db = null;
+  let firebaseReady = false;
+  try{
+    if(firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf('PASTE_ME') === -1 && window.firebase){
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      firebaseReady = true;
+    }
+  }catch(e){ console.error('Firebase init failed', e); firebaseReady = false; }
+
+  function stateDocRef(){ return db.collection('nyoyaDiary').doc('state'); }
+
+  function defaultState(){
+    return { diaryEntries: [], todos: [], calNotes: {}, memoryBox: [], monthlySurprise: null };
+  }
+
+  function setSyncStatus(on){
+    const dot = document.getElementById('sync-dot');
+    if(dot) dot.classList.toggle('on', !!on);
+  }
+  function showConnBanner(msg){
+    const b = document.getElementById('conn-banner');
+    if(!b) return;
+    if(!msg){ b.style.display = 'none'; b.className = 'conn-banner'; b.innerHTML=''; return; }
+    b.style.display = 'block';
+    b.className = 'conn-banner';
+    b.textContent = msg;
+  }
+  if(!firebaseReady){
+    showConnBanner('⚠ Firebase belum disambungkan — isi firebaseConfig di kode (lihat komentar setup di paling atas). Untuk sekarang data hanya tersimpan di HP ini.');
+  }
+
+  async function saveAll(state){
+    if(!firebaseReady) return false;
+    try{
+      await stateDocRef().set(state);
+      setSyncStatus(true);
+      return true;
+    }catch(e){ console.error('firestore save failed', e); setSyncStatus(false); return false; }
+  }
+  // Real-time listener: fires immediately with current data, then again whenever it
+  // changes anywhere (e.g. the other person saved something on their own phone).
+  function listenState(onChange){
+    if(!firebaseReady) return;
+    stateDocRef().onSnapshot(snap=>{
+      setSyncStatus(true);
+      onChange(snap.exists ? snap.data() : defaultState());
+    }, err=>{
+      console.error('firestore listen failed', err);
+      setSyncStatus(false);
+    });
+  }
+
+  // ---------- WHO AM I ----------
+  const WHOAMI_KEY = 'ny-whoami';
+  let currentUser = localStorage.getItem(WHOAMI_KEY) || null;
+
+  function setWhoamiLabel(){
+    const label = document.getElementById('whoami-label');
+    if(label) label.textContent = currentUser ? currentUser : 'Who am I?';
+  }
+
+  function openWhoamiModal(forced){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal-sheet">
+        ${forced ? '' : '<button class="close-x">✕</button>'}
+        <h3>Siapa kamu? 💛</h3>
+        <div style="font-size:13px; color:var(--ink-soft); margin-bottom:14px;">Ini supaya setiap tulisan, notes, dan entry tahu siapa yang mengisi.</div>
+        <button class="ny-btn" id="who-nyoya-btn" style="margin-top:0;">Nyoya</button>
+        <button class="ny-btn secondary" id="who-nyanyo-btn" style="margin-top:10px;">Nyanyo</button>
+      </div>`;
+    if(!forced){
+      backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+      backdrop.querySelector('.close-x').addEventListener('click', ()=>backdrop.remove());
+    }
+    backdrop.querySelector('#who-nyoya-btn').addEventListener('click', ()=>{
+      currentUser = 'Nyoya'; localStorage.setItem(WHOAMI_KEY, currentUser); setWhoamiLabel(); backdrop.remove();
+    });
+    backdrop.querySelector('#who-nyanyo-btn').addEventListener('click', ()=>{
+      currentUser = 'Nyanyo'; localStorage.setItem(WHOAMI_KEY, currentUser); setWhoamiLabel(); backdrop.remove();
+    });
+    document.body.appendChild(backdrop);
+  }
+
+  function bindWhoami(){
+    document.getElementById('whoami-chip').addEventListener('click', ()=> openWhoamiModal(false));
+    setWhoamiLabel();
+    if(!currentUser) openWhoamiModal(true);
+  }
+
+  function authorTag(name){
+    return name ? `<span class="author-tag">${escapeHtml(name)}</span>` : '';
+  }
+
+  const MOODS = [
+    { key:'happy',   label:'Happy',      color:'var(--mood-happy)' },
+    { key:'sad',      label:'Sad',        color:'var(--mood-sad)' },
+    { key:'pouty',    label:'Pouty',      color:'var(--mood-pouty)' },
+    { key:'missing',  label:'Missing You',color:'var(--mood-missing)' },
+    { key:'crying',   label:'Crying',     color:'var(--mood-crying)' },
+    { key:'joyful',   label:'Joyful',     color:'var(--mood-joyful)' },
+  ];
+
+  const TAGS = [
+    { key:'important', label:'Important', color:'var(--tag-important)' },
+    { key:'schedule',  label:'Schedule',   color:'var(--tag-schedule)' },
+    { key:'period',    label:'Period',     color:'var(--tag-period)' },
+    { key:'quality',   label:'Quality Time', color:'var(--tag-quality)' },
+  ];
+
+  function moodIcon(key, sizeAttrs){
+    sizeAttrs = sizeAttrs || '';
+    const common = 'viewBox="0 0 40 40" ' + sizeAttrs;
+    switch(key){
+      case 'happy':
+        return `<svg ${common}><circle cx="20" cy="20" r="18" fill="#FBEFD9" stroke="var(--mood-happy)" stroke-width="2"/><circle cx="14" cy="17" r="1.8" fill="var(--ink)"/><circle cx="26" cy="17" r="1.8" fill="var(--ink)"/><path d="M12 24c2 3 14 3 16 0" stroke="var(--ink)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
+      case 'sad':
+        return `<svg ${common}><circle cx="20" cy="20" r="18" fill="#EAEEF5" stroke="var(--mood-sad)" stroke-width="2"/><circle cx="14" cy="18" r="1.8" fill="var(--ink)"/><circle cx="26" cy="18" r="1.8" fill="var(--ink)"/><path d="M12 27c2-3 14-3 16 0" stroke="var(--ink)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
+      case 'pouty':
+        return `<svg ${common}><circle cx="20" cy="20" r="18" fill="#F6E3E5" stroke="var(--mood-pouty)" stroke-width="2"/><path d="M11 15c1.5-1.5 4-1.5 5.5 0M23.5 15c1.5-1.5 4-1.5 5.5 0" stroke="var(--ink)" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="20" cy="26" r="3" fill="var(--ink)"/></svg>`;
+      case 'missing':
+        return `<svg ${common}><circle cx="20" cy="20" r="18" fill="#EEE6F2" stroke="var(--mood-missing)" stroke-width="2"/><circle cx="14" cy="18" r="1.8" fill="var(--ink)"/><circle cx="26" cy="18" r="1.8" fill="var(--ink)"/><path d="M14 26c2-1.4 10-1.4 12 0" stroke="var(--ink)" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M29 10l1.4 1.4M31 8.6l-1.4 1.4" stroke="var(--mood-missing)" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+      case 'crying':
+        return `<svg ${common}><circle cx="20" cy="20" r="18" fill="#E4F1EF" stroke="var(--mood-crying)" stroke-width="2"/><circle cx="14" cy="17" r="1.8" fill="var(--ink)"/><circle cx="26" cy="17" r="1.8" fill="var(--ink)"/><path d="M13 27c2-2 12-2 14 0" stroke="var(--ink)" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M14 20c0 3-3 4-3 7a3 3 0 006 0c0-3-3-4-3-7z" fill="var(--mood-crying)"/></svg>`;
+      case 'joyful':
+        return `<svg ${common}><circle cx="20" cy="20" r="18" fill="#F6E1E8" stroke="var(--mood-joyful)" stroke-width="2"/><path d="M11 17c1.5 1.8 4 1.8 5.5 0M23.5 17c1.5 1.8 4 1.8 5.5 0" stroke="var(--ink)" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M11 23c2 4 16 4 18 0" stroke="var(--ink)" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>`;
+      default:
+        return '';
+    }
+  }
+
+  const heartIconSm = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 20s-7-4.4-9.3-8.6C1 8 3 4.5 6.6 4.5c2.1 0 3.9 1.2 5.4 3 1.5-1.8 3.3-3 5.4-3 3.6 0 5.6 3.5 3.9 6.9C19 15.6 12 20 12 20z"/></svg>`;
+  const checkIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg>`;
+
+  // ---------- state ----------
+  let diaryEntries = [];
+  let todos = [];
+  let calNotes = {}; // { 'YYYY-MM-DD': [{id,text,tag}] }
+  let memoryBox = [];
+  let monthlyMsg = "Every day with you is my favorite memory. Happy monthsary, Princess Nyoya. I love you more than words can hold. 💛";
+  let monthlyPhoto = null; // { dataUrl, name }
+  let pendingMbPhoto = null; // { dataUrl, name } for the memory box add-form
+
+  let selectedMood = null;
+  let calViewYear, calViewMonth; // 0-indexed month
+  let calSelectedDate = null;
+  let calSelectedTag = TAGS[0].key;
+
+  const OWNER_PIN = '2411';
+  let isOwner = false;
+
+  const todayStr = () => fmtDate(new Date());
+  function fmtDate(d){
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function niceDate(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  }
+
+  // ---------- shared state persistence ----------
+  function applyState(state, isFirstLoad){
+    diaryEntries = Array.isArray(state.diaryEntries) ? state.diaryEntries : [];
+    diaryEntries.sort((a,b)=> b.date.localeCompare(a.date));
+    renderDiaryList();
+    if(isFirstLoad){
+      const today = diaryEntries.find(e=>e.date===todayStr());
+      if(today){
+        selectedMood = today.mood;
+        document.querySelectorAll('.mood-btn').forEach(b=>{
+          b.classList.toggle('selected', b.dataset.mood === today.mood);
+        });
+        document.getElementById('diary-text').value = today.text || '';
+      }
+    }
+    todos = Array.isArray(state.todos) ? state.todos : [];
+    renderTodos();
+    calNotes = (state.calNotes && typeof state.calNotes === 'object') ? state.calNotes : {};
+    renderCalendar();
+    if(calSelectedDate) renderDayNotes(calSelectedDate);
+    memoryBox = Array.isArray(state.memoryBox) ? state.memoryBox : [];
+    if(state.monthlySurprise){
+      if(state.monthlySurprise.message) monthlyMsg = state.monthlySurprise.message;
+      if('photo' in state.monthlySurprise) monthlyPhoto = state.monthlySurprise.photo;
+    }
+    renderMemoryBox();
+  }
+
+  let lastSavedJSON = null;
+  function currentState(){
+    return { diaryEntries, todos, calNotes, memoryBox, monthlySurprise: { message: monthlyMsg, photo: monthlyPhoto } };
+  }
+  // Call this after any local change: saves to the shared database immediately.
+  async function persist(){
+    const state = currentState();
+    lastSavedJSON = JSON.stringify(state);
+    return await saveAll(state);
+  }
+
+  // ---------- init ----------
+  function init(){
+    document.getElementById('ny-today-label').textContent = niceDate(todayStr());
+
+    renderMoodGrid();
+    bindNav();
+    bindDiary();
+    bindNotes();
+    bindCalendarShell();
+    bindMemoryBox();
+    bindOwner();
+    bindWhoami();
+
+    const now = new Date();
+    calViewYear = now.getFullYear();
+    calViewMonth = now.getMonth();
+
+    if(firebaseReady){
+      // Real-time: fires immediately with current data, then again whenever the other
+      // person saves something — no refresh needed, updates appear automatically.
+      listenState((state)=>{
+        const json = JSON.stringify(state);
+        const isFirst = (lastSavedJSON === null);
+        if(json === lastSavedJSON) return;
+        lastSavedJSON = json;
+        applyState(state, isFirst);
+      });
+    } else {
+      renderDiaryList(); renderTodos(); renderCalendar(); renderMemoryBox();
+    }
+  }
+
+  // ---------- DIARY ----------
+  function renderMoodGrid(){
+    const grid = document.getElementById('mood-grid');
+    grid.innerHTML = MOODS.map(m => `
+      <button class="mood-btn" data-mood="${m.key}" style="--sel-color:${m.color}; --sel-bg:${m.color}22;">
+        ${moodIcon(m.key)}
+        <span>${m.label}</span>
+      </button>
+    `).join('');
+    grid.querySelectorAll('.mood-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        grid.querySelectorAll('.mood-btn').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedMood = btn.dataset.mood;
+      });
+    });
+  }
+
+  function bindDiary(){
+    document.getElementById('save-diary-btn').addEventListener('click', async ()=>{
+      const text = document.getElementById('diary-text').value.trim();
+      if(!selectedMood && !text){ return; }
+      const date = todayStr();
+      diaryEntries = diaryEntries.filter(e => e.date !== date);
+      diaryEntries.unshift({ date, mood: selectedMood, text, author: currentUser });
+      diaryEntries.sort((a,b)=> b.date.localeCompare(a.date));
+      const ok = await persist();
+      renderDiaryList();
+      document.getElementById('diary-text').value = '';
+      const btn = document.getElementById('save-diary-btn');
+      const original = btn.textContent;
+      btn.textContent = ok ? 'Saved ✓' : 'Could not save, try again';
+      setTimeout(()=>{ btn.textContent = original; }, 1600);
+    });
+  }
+
+  function renderDiaryList(){
+    const el = document.getElementById('diary-list');
+    if(!diaryEntries.length){
+      el.innerHTML = `<div class="empty-state"><span class="ny-display">Nothing here yet</span>Your first entry will show up here.</div>`;
+      return;
+    }
+    el.innerHTML = diaryEntries.map(e=>{
+      const mood = MOODS.find(m=>m.key===e.mood);
+      return `<div class="entry-row">
+        <div class="entry-icon">${mood ? moodIcon(mood.key) : ''}</div>
+        <div class="entry-body">
+          <div class="entry-date">${niceDate(e.date)}${mood ? ' · ' + mood.label : ''}${authorTag(e.author)}</div>
+          ${e.text ? `<div class="entry-text">${escapeHtml(e.text)}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ---------- NOTES / TODO ----------
+  function bindNotes(){
+    document.getElementById('todo-add-btn').addEventListener('click', addTodo);
+    document.getElementById('todo-input').addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') addTodo();
+    });
+  }
+  async function addTodo(){
+    const input = document.getElementById('todo-input');
+    const text = input.value.trim();
+    if(!text) return;
+    todos.unshift({ id: 't'+Date.now(), text, done:false, author: currentUser });
+    input.value = '';
+    renderTodos();
+    await persist();
+  }
+  function renderTodos(){
+    const el = document.getElementById('todo-list');
+    if(!todos.length){
+      el.innerHTML = `<div class="empty-state"><span class="ny-display">All clear</span>Add reminders so neither of you forgets.</div>`;
+      return;
+    }
+    el.innerHTML = todos.map(t=>`
+      <div class="todo-row" data-id="${t.id}">
+        <div class="todo-check ${t.done?'checked':''}" data-action="toggle">${checkIcon}</div>
+        <div class="todo-text ${t.done?'done':''}">${escapeHtml(t.text)}${authorTag(t.author)}</div>
+        <button class="todo-del" data-action="del">✕</button>
+      </div>
+    `).join('');
+    el.querySelectorAll('[data-action="toggle"]').forEach(elm=>{
+      elm.addEventListener('click', async ()=>{
+        const id = elm.closest('.todo-row').dataset.id;
+        const t = todos.find(x=>x.id===id);
+        if(t){ t.done = !t.done; renderTodos(); await persist(); }
+      });
+    });
+    el.querySelectorAll('[data-action="del"]').forEach(elm=>{
+      elm.addEventListener('click', async ()=>{
+        const id = elm.closest('.todo-row').dataset.id;
+        todos = todos.filter(x=>x.id!==id);
+        renderTodos();
+        await persist();
+      });
+    });
+  }
+
+  // ---------- CALENDAR ----------
+  function bindCalendarShell(){
+    document.getElementById('cal-prev').addEventListener('click', ()=>{
+      calViewMonth--; if(calViewMonth<0){ calViewMonth=11; calViewYear--; }
+      renderCalendar();
+    });
+    document.getElementById('cal-next').addEventListener('click', ()=>{
+      calViewMonth++; if(calViewMonth>11){ calViewMonth=0; calViewYear++; }
+      renderCalendar();
+    });
+    document.getElementById('cal-tag-picker').innerHTML = TAGS.map(t=>`
+      <button class="tag-choice" data-tag="${t.key}" style="--tc:${t.color};">${t.label}</button>
+    `).join('');
+    document.getElementById('cal-tag-picker').querySelectorAll('.tag-choice').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        calSelectedTag = btn.dataset.tag;
+        document.querySelectorAll('.tag-choice').forEach(b=>{
+          b.classList.remove('on');
+          b.style.background = 'var(--white)';
+        });
+        btn.classList.add('on');
+        btn.style.background = getComputedStyle(btn).getPropertyValue('--tc') || 'var(--berry)';
+      });
+    });
+    document.getElementById('cal-note-add-btn').addEventListener('click', addCalNote);
+  }
+
+  function renderCalendar(){
+    const label = new Date(calViewYear, calViewMonth, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    document.getElementById('cal-month-label').textContent = label;
+
+    const dowRow = document.getElementById('cal-dow-row');
+    dowRow.innerHTML = ['S','M','T','W','T','F','S'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+
+    const grid = document.getElementById('cal-grid');
+    const firstDow = new Date(calViewYear, calViewMonth, 1).getDay();
+    const daysInMonth = new Date(calViewYear, calViewMonth+1, 0).getDate();
+    let html = '';
+    for(let i=0;i<firstDow;i++) html += `<div class="cal-day empty"></div>`;
+    for(let d=1; d<=daysInMonth; d++){
+      const dateStr = `${calViewYear}-${String(calViewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isToday = dateStr === todayStr();
+      const isSelected = dateStr === calSelectedDate;
+      const notes = calNotes[dateStr] || [];
+      const dots = [...new Set(notes.map(n=>n.tag))].slice(0,4).map(tagKey=>{
+        const t = TAGS.find(x=>x.key===tagKey);
+        return `<span style="background:${t?t.color:'var(--berry)'}"></span>`;
+      }).join('');
+      html += `<div class="cal-day ${isToday?'today':''} ${isSelected?'selected':''}" data-date="${dateStr}">
+        <div>${d}</div>
+        <div class="cal-dots">${dots}</div>
+      </div>`;
+    }
+    grid.innerHTML = html;
+    grid.querySelectorAll('.cal-day:not(.empty)').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        calSelectedDate = el.dataset.date;
+        renderCalendar();
+        openDayPanel(calSelectedDate);
+      });
+    });
+  }
+
+  function openDayPanel(dateStr){
+    const panel = document.getElementById('cal-day-panel');
+    panel.style.display = 'block';
+    document.getElementById('cal-day-title').textContent = niceDate(dateStr);
+    document.getElementById('cal-note-input').value = '';
+    renderDayNotes(dateStr);
+    panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  function renderDayNotes(dateStr){
+    const notes = calNotes[dateStr] || [];
+    const el = document.getElementById('cal-day-notes');
+    if(!notes.length){ el.innerHTML = ''; return; }
+    el.innerHTML = notes.map(n=>{
+      const t = TAGS.find(x=>x.key===n.tag);
+      return `<div class="day-note-item" data-id="${n.id}">
+        <div>
+          <span class="tag-pill" style="background:${t?t.color:'var(--berry)'}">${t?t.label:''}</span>${authorTag(n.author)}
+          <div class="day-note-text">${escapeHtml(n.text)}</div>
+        </div>
+        <button class="todo-del" data-del="${n.id}">✕</button>
+      </div>`;
+    }).join('');
+    el.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.dataset.del;
+        calNotes[dateStr] = (calNotes[dateStr]||[]).filter(n=>n.id!==id);
+        if(!calNotes[dateStr].length) delete calNotes[dateStr];
+        renderDayNotes(dateStr);
+        renderCalendar();
+        await persist();
+      });
+    });
+  }
+
+  async function addCalNote(){
+    if(!calSelectedDate) return;
+    const text = document.getElementById('cal-note-input').value.trim();
+    if(!text) return;
+    if(!calNotes[calSelectedDate]) calNotes[calSelectedDate] = [];
+    calNotes[calSelectedDate].push({ id:'n'+Date.now(), text, tag: calSelectedTag, author: currentUser });
+    document.getElementById('cal-note-input').value = '';
+    renderDayNotes(calSelectedDate);
+    renderCalendar();
+    await persist();
+  }
+
+  // ---------- MEMORY BOX ----------
+  function bindMemoryBox(){
+    document.getElementById('mb-add-toggle').addEventListener('click', ()=>{
+      const form = document.getElementById('mb-add-form');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+    document.getElementById('mb-save-btn').addEventListener('click', saveMemoryItem);
+    document.getElementById('mb-photo-input').addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      if(!file.type.startsWith('image/')){
+        alert('Please choose an image file (JPG, PNG, etc).');
+        e.target.value = '';
+        return;
+      }
+      try{
+        const dataUrl = await compressImage(file);
+        const approxBytes = dataUrl.length * 0.75;
+        if(approxBytes > 4.5 * 1024 * 1024){
+          alert('This photo is still too large even after compression. Try a different photo.');
+          e.target.value = '';
+          return;
+        }
+        pendingMbPhoto = { dataUrl, name: file.name };
+        renderMbPhotoPreview();
+      }catch(err){
+        alert('Could not read that photo, please try another one.');
+      }
+      e.target.value = '';
+    });
+  }
+
+  function renderMbPhotoPreview(){
+    const el = document.getElementById('mb-photo-preview');
+    if(!pendingMbPhoto){ el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div style="position:relative; display:inline-block;">
+        <img src="${pendingMbPhoto.dataUrl}" style="max-width:140px; border-radius:10px; display:block; border:1px solid var(--line);" />
+        <button id="mb-photo-remove" style="position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:var(--white); border:1px solid var(--line); color:var(--ink-soft); cursor:pointer; font-size:12px;">✕</button>
+      </div>`;
+    document.getElementById('mb-photo-remove').addEventListener('click', ()=>{
+      pendingMbPhoto = null;
+      renderMbPhotoPreview();
+    });
+  }
+
+  async function saveMemoryItem(){
+    const title = document.getElementById('mb-title').value.trim();
+    const message = document.getElementById('mb-message').value.trim();
+    const date = document.getElementById('mb-date').value;
+    if(!title || !message) return;
+    memoryBox.unshift({ id:'m'+Date.now(), title, message, photo: pendingMbPhoto, unlockDate: date || null, createdAt: todayStr(), author: currentUser });
+    document.getElementById('mb-title').value = '';
+    document.getElementById('mb-message').value = '';
+    document.getElementById('mb-date').value = '';
+    pendingMbPhoto = null;
+    renderMbPhotoPreview();
+    document.getElementById('mb-add-form').style.display = 'none';
+    renderMemoryBox();
+    await persist();
+  }
+
+  function isUnlocked(item){
+    if(!item.unlockDate) return true;
+    return item.unlockDate <= todayStr();
+  }
+
+  function renderMemoryBox(){
+    // Monthly surprise card
+    const card = document.getElementById('monthly-surprise-card');
+    const day = new Date().getDate();
+    if(day === 12){
+      card.innerHTML = `
+        <div class="seal-wrap">
+          <div class="seal cracked" id="monthly-seal">${heartIconSm}</div>
+          <div class="memory-title">A surprise for the 12th 💌</div>
+          <div class="memory-msg">${escapeHtml(monthlyMsg)}</div>
+          ${monthlyPhoto ? `<img src="${monthlyPhoto.dataUrl}" alt="${escapeHtml(monthlyPhoto.name||'photo')}" style="width:100%; border-radius:14px; margin-top:12px; display:block;" />` : ''}
+        </div>`;
+      triggerHearts();
+    } else {
+      const next = nextTwelveDate();
+      card.innerHTML = `
+        <div class="seal-wrap">
+          <div class="seal" id="monthly-seal">${heartIconSm}</div>
+          <div class="memory-title">Monthly surprise</div>
+          <div class="memory-sub">Comes back every 12th of the month</div>
+          <div class="countdown-chip">Unlocks ${niceDate(next)}</div>
+        </div>`;
+      document.getElementById('monthly-seal').addEventListener('click', ()=>{
+        card.querySelector('.seal').classList.add('cracked');
+        const box = document.createElement('div');
+        box.className = 'memory-msg';
+        box.textContent = "This one is sealed until the 12th — but here's a little something for now: I'm always thinking of you. 💛";
+        card.querySelector('.seal-wrap').appendChild(box);
+      }, { once:true });
+    }
+
+    // list
+    const list = document.getElementById('mb-list');
+    if(!memoryBox.length){
+      list.innerHTML = `<div class="empty-state"><span class="ny-display">The box is empty</span>Add the first little memory or gift.</div>`;
+      return;
+    }
+    list.innerHTML = memoryBox.map(item=>{
+      const unlocked = isUnlocked(item);
+      return `<div class="mb-card" data-id="${item.id}">
+        <div class="mb-seal-sm ${unlocked?'unlocked':'locked'}">${heartIconSm}</div>
+        <div class="mb-info">
+          <div class="t">${escapeHtml(item.title)}${item.photo ? ' 📷' : ''}${authorTag(item.author)}</div>
+          <div class="d">${unlocked ? 'Tap to open' : 'Unlocks ' + niceDate(item.unlockDate)}</div>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.mb-card').forEach(elm=>{
+      elm.addEventListener('click', ()=>{
+        const item = memoryBox.find(x=>x.id===elm.dataset.id);
+        if(!item) return;
+        if(!isUnlocked(item)){
+          openModal(item.title, `<div class="memory-sub">This one unlocks on ${niceDate(item.unlockDate)}. Come back then 💌</div>`);
+          return;
+        }
+        const photoHtml = item.photo ? `<img src="${item.photo.dataUrl}" alt="${escapeHtml(item.photo.name||'photo')}" style="width:100%; border-radius:12px; margin-top:12px; display:block;" />` : '';
+        const fromHtml = item.author ? `<div class="memory-sub" style="margin-top:6px;">From ${escapeHtml(item.author)}</div>` : '';
+        openModal(item.title, `<div class="memory-msg">${escapeHtml(item.message)}</div>${fromHtml}${photoHtml}`);
+      });
+    });
+  }
+
+  function nextTwelveDate(){
+    const now = new Date();
+    let y = now.getFullYear(), m = now.getMonth();
+    if(now.getDate() >= 12){ m++; if(m>11){m=0;y++;} }
+    const d = new Date(y, m, 12);
+    return fmtDate(d);
+  }
+
+  function triggerHearts(){
+    if(document.getElementById('hearts-layer')) return;
+    const layer = document.createElement('div');
+    layer.className = 'hearts-fall';
+    layer.id = 'hearts-layer';
+    const emojis = ['💛','💌','✨'];
+    for(let i=0;i<16;i++){
+      const s = document.createElement('span');
+      s.textContent = emojis[i % emojis.length];
+      s.style.left = Math.random()*100 + '%';
+      s.style.animationDuration = (3 + Math.random()*2.5) + 's';
+      s.style.animationDelay = (Math.random()*1.5) + 's';
+      layer.appendChild(s);
+    }
+    document.body.appendChild(layer);
+    setTimeout(()=>{ layer.remove(); }, 6000);
+  }
+
+  function openModal(title, bodyHtml){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal-sheet">
+        <button class="close-x">✕</button>
+        <h3>${escapeHtml(title)}</h3>
+        ${bodyHtml}
+      </div>`;
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('.close-x').addEventListener('click', ()=>backdrop.remove());
+    document.body.appendChild(backdrop);
+  }
+
+  // ---------- OWNER MODE ----------
+  function bindOwner(){
+    document.getElementById('owner-lock-btn').addEventListener('click', ()=>{
+      if(isOwner){
+        isOwner = false;
+        applyOwnerState();
+      } else {
+        openPinModal();
+      }
+    });
+    document.getElementById('owner-save-msg-btn').addEventListener('click', async ()=>{
+      const val = document.getElementById('owner-monthly-msg').value.trim();
+      if(!val) return;
+      monthlyMsg = val;
+      const ok = await persist();
+      renderMemoryBox();
+      const btn = document.getElementById('owner-save-msg-btn');
+      const orig = btn.textContent;
+      btn.textContent = ok ? 'Saved ✓' : 'Could not save, try again';
+      setTimeout(()=>{ btn.textContent = orig; }, 1600);
+    });
+    document.getElementById('owner-photo-input').addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      if(!file.type.startsWith('image/')){
+        alert('Please choose an image file (JPG, PNG, etc).');
+        e.target.value = '';
+        return;
+      }
+      try{
+        const dataUrl = await compressImage(file);
+        const approxBytes = dataUrl.length * 0.75;
+        if(approxBytes > 4.5 * 1024 * 1024){
+          alert('This photo is still too large even after compression. Try a different photo.');
+          e.target.value = '';
+          return;
+        }
+        monthlyPhoto = { dataUrl, name: file.name };
+        renderOwnerPhotoPreview();
+      }catch(err){
+        alert('Could not read that photo, please try another one.');
+      }
+      e.target.value = '';
+    });
+    document.getElementById('owner-export-btn').addEventListener('click', exportDiaryCSV);
+  }
+
+  function compressImage(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = (e)=>{
+        const img = new Image();
+        img.onload = ()=>{
+          const maxDim = 1000;
+          let { width, height } = img;
+          if(width > maxDim || height > maxDim){
+            if(width > height){ height = Math.round(height * (maxDim/width)); width = maxDim; }
+            else { width = Math.round(width * (maxDim/height)); height = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.75));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderOwnerPhotoPreview(){
+    const el = document.getElementById('owner-photo-preview');
+    if(!monthlyPhoto){ el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div style="position:relative; display:inline-block;">
+        <img src="${monthlyPhoto.dataUrl}" style="max-width:140px; border-radius:10px; display:block; border:1px solid var(--line);" />
+        <button id="owner-photo-remove" style="position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:var(--white); border:1px solid var(--line); color:var(--ink-soft); cursor:pointer; font-size:12px;">✕</button>
+      </div>`;
+    document.getElementById('owner-photo-remove').addEventListener('click', ()=>{
+      monthlyPhoto = null;
+      renderOwnerPhotoPreview();
+    });
+  }
+
+  function applyOwnerState(){
+    document.getElementById('owner-panel').style.display = isOwner ? 'block' : 'none';
+    if(isOwner){
+      document.getElementById('owner-monthly-msg').value = monthlyMsg;
+      renderOwnerPhotoPreview();
+    }
+    const icon = document.getElementById('owner-lock-icon');
+    icon.style.color = isOwner ? 'var(--berry)' : '';
+  }
+
+  function openPinModal(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal-sheet">
+        <button class="close-x">✕</button>
+        <h3>Owner access</h3>
+        <input class="ny-input" id="pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="Enter PIN" />
+        <button class="ny-btn" id="pin-submit-btn">Unlock</button>
+        <div id="pin-error" style="color:var(--berry); font-size:12px; margin-top:8px; display:none;">Incorrect PIN, try again.</div>
+      </div>`;
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    backdrop.querySelector('.close-x').addEventListener('click', ()=>backdrop.remove());
+    const submit = ()=>{
+      const val = backdrop.querySelector('#pin-input').value.trim();
+      if(val === OWNER_PIN){
+        isOwner = true;
+        backdrop.remove();
+        applyOwnerState();
+      } else {
+        backdrop.querySelector('#pin-error').style.display = 'block';
+      }
+    };
+    backdrop.querySelector('#pin-submit-btn').addEventListener('click', submit);
+    backdrop.querySelector('#pin-input').addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
+    document.body.appendChild(backdrop);
+    setTimeout(()=> backdrop.querySelector('#pin-input').focus(), 100);
+  }
+
+  function exportDiaryCSV(){
+    const header = ['Date','Mood','Entry'];
+    const escCell = (v)=> `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+    let csv = header.map(escCell).join(',') + '\n';
+    diaryEntries.forEach(e=>{
+      csv += [e.date, e.mood||'', e.text||''].map(escCell).join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'nyoya-diary-entries.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------- NAV ----------
+  function bindNav(){
+    document.querySelectorAll('.nav-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.ny-tab').forEach(t=>t.classList.remove('active'));
+        document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+      });
+    });
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : str;
+    return div.innerHTML;
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
