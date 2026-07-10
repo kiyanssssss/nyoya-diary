@@ -1,0 +1,9 @@
+{
+  "name": "nyoya-diary-notifier",
+  "private": true,
+  "version": "1.0.0",
+  "description": "GitHub Actions push-notification checker for the Nyoya Diary app",
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}
