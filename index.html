@@ -447,6 +447,60 @@
     margin:0; flex:1; resize:none; overflow-y:auto; max-height:220px; line-height:1.4;
     font-family:'Karla',sans-serif; padding-top:10px; padding-bottom:10px;
   }
+  .chat-icon-btn{
+    background:var(--paper-deep); border:none; border-radius:50%; width:38px; height:38px;
+    font-size:17px; cursor:pointer; flex-shrink:0; align-self:flex-end;
+  }
+  .chat-photo-preview{ padding:10px 14px 0; }
+  .chat-photo-preview img{ max-width:110px; border-radius:10px; display:block; border:1px solid var(--line); }
+  .chat-photo-preview button{
+    margin-top:6px; background:none; border:1px solid var(--line); border-radius:8px;
+    padding:3px 9px; font-size:11px; cursor:pointer; color:var(--ink-soft);
+  }
+  .chat-photo-img{ max-width:100%; border-radius:12px; display:block; margin-bottom:6px; }
+
+  /* Quote of the day */
+  .quote-card{
+    background:linear-gradient(135deg, var(--berry), var(--berry-deep));
+    color:#fff; text-align:center; padding:22px 18px;
+  }
+  .quote-label{ font-size:11px; letter-spacing:1.5px; text-transform:uppercase; opacity:0.8; font-weight:700; margin-bottom:8px; }
+  .quote-text{
+    font-family:'Caveat',cursive; font-size:24px; line-height:1.35; min-height:60px;
+    transition:opacity .3s ease; display:flex; align-items:center; justify-content:center;
+  }
+  .quote-refresh-btn{
+    margin-top:12px; background:rgba(255,255,255,0.18); border:none; color:#fff;
+    border-radius:20px; padding:6px 14px; font-size:11.5px; font-weight:700; cursor:pointer;
+  }
+
+  /* Timeline posts */
+  .post-card{
+    background:var(--white); border:1px solid var(--line); border-radius:16px;
+    padding:14px; margin-bottom:12px;
+  }
+  .post-head{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--ink-soft); margin-bottom:8px; flex-wrap:wrap; }
+  .post-author{ font-weight:700; color:var(--berry-deep); }
+  .post-mood-badge{
+    background:var(--paper-deep); border-radius:20px; padding:2px 9px; font-weight:700; font-size:11px;
+  }
+  .post-photo{ width:100%; border-radius:12px; display:block; margin-bottom:8px; }
+  .post-text{ font-size:14px; line-height:1.5; color:var(--ink); white-space:pre-wrap; }
+  .post-actions{ display:flex; gap:14px; margin-top:10px; }
+  .post-like-btn, .post-comment-btn{
+    background:none; border:none; cursor:pointer; font-size:13px; font-weight:700;
+    color:var(--ink-soft); padding:4px 2px; display:flex; align-items:center; gap:5px;
+  }
+  .post-like-btn.liked{ color:var(--berry); }
+  .post-comments{ margin-top:10px; border-top:1px solid var(--line); padding-top:10px; }
+  .comment-row{ font-size:13px; margin-bottom:6px; color:var(--ink); }
+  .comment-row b{ color:var(--berry-deep); }
+  .comment-input-row{ display:flex; gap:6px; margin-top:6px; }
+  .comment-input-row .ny-input{ margin:0; flex:1; padding:8px 10px; font-size:13px; }
+  .comment-send-btn{
+    background:var(--berry); color:#fff; border:none; border-radius:8px;
+    padding:0 12px; font-size:12.5px; font-weight:700; cursor:pointer;
+  }
   html, body{
     margin:0;
     padding:0;
@@ -475,8 +529,30 @@
 
   <div class="ny-content">
 
+    <!-- HOME / TIMELINE TAB -->
+    <div class="ny-tab active" id="tab-home">
+      <div class="ny-card quote-card">
+        <div class="quote-label">Quote of the day</div>
+        <div class="quote-text" id="quote-text">…</div>
+        <button class="quote-refresh-btn" id="quote-refresh-btn" title="New quote">↻ Shuffle</button>
+      </div>
+
+      <div class="ny-card">
+        <textarea class="ny-input" id="post-text-input" rows="2" placeholder="What's your story today? 📝"></textarea>
+        <div id="post-photo-preview"></div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <input type="file" id="post-photo-input" accept="image/*" style="display:none;" />
+          <button type="button" class="ny-btn secondary" id="post-photo-btn" style="margin-top:0; width:auto; padding:9px 14px;">📷 Add photo</button>
+          <button class="ny-btn" id="post-submit-btn" style="margin-top:0; flex:1;">Post</button>
+        </div>
+      </div>
+
+      <div class="ny-section-title">Timeline</div>
+      <div id="home-feed"><div class="loading-msg">Loading timeline...</div></div>
+    </div>
+
     <!-- DIARY TAB -->
-    <div class="ny-tab active" id="tab-diary">
+    <div class="ny-tab" id="tab-diary">
       <div class="ny-card">
         <div class="ny-section-title" style="margin-top:0;">How are you feeling today?</div>
         <div class="mood-grid" id="mood-grid"></div>
@@ -558,8 +634,11 @@
       <div class="ny-section-title" style="margin-top:0;">Chat</div>
       <div class="ny-card" style="padding:0; overflow:hidden;">
         <div id="chat-messages" class="chat-messages"><div class="loading-msg">Loading chat...</div></div>
+        <div id="chat-photo-preview" class="chat-photo-preview" style="display:none;"></div>
         <div class="chat-input-row">
-          <textarea class="ny-input" id="chat-input" rows="1" placeholder="Tulis pesan... (Shift+Enter untuk baris baru)" autocomplete="off"></textarea>
+          <input type="file" id="chat-photo-input" accept="image/*" style="display:none;" />
+          <button type="button" id="chat-photo-btn" class="chat-icon-btn" title="Attach photo">📷</button>
+          <textarea class="ny-input" id="chat-input" rows="1" placeholder="Type a message... (Shift+Enter for a new line)" autocomplete="off"></textarea>
           <button class="ny-btn" id="chat-send-btn" style="margin-top:0; width:auto; padding:10px 18px; align-self:flex-end;">Send</button>
         </div>
       </div>
@@ -568,7 +647,11 @@
   </div>
 
   <div class="ny-nav">
-    <button class="nav-btn active" data-tab="diary">
+    <button class="nav-btn active" data-tab="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      Home
+    </button>
+    <button class="nav-btn" data-tab="diary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7.5-4.6-10-9.3C.5 7.8 3 4 6.7 4 9 4 11 5.3 12 7c1-1.7 3-3 5.3-3C21 4 23.5 7.8 22 11.7 19.5 16.4 12 21 12 21z"/></svg>
       Diary
     </button>
@@ -594,19 +677,19 @@
 <script>
 (function(){
   // ================= FIREBASE SETUP (Google, free) =================
-  // 1. Buka https://console.firebase.google.com -> masuk dengan akun Google kamu -> "Add project" / "Create a project"
-  //    -> kasih nama bebas (mis. "nyoya-diary") -> Continue -> Google Analytics boleh dimatikan -> Create project.
-  // 2. Di sidebar kiri project, cari "Databases & Storage" (atau "Build") -> klik "Firestore Database".
-  // 3. Klik "Create database" / "Add database" -> pilih edisi "Standard" (bukan Enterprise) -> Next.
-  // 4. Pilih lokasi server (bebas, mis. asia-southeast) -> Next.
-  // 5. Di bagian security rules, pilih opsi yang isinya "allow anyone to read and overwrite your data"
-  //    (biasa disebut "test mode") -> Create/Enable.
-  // 6. Klik ikon gerigi ⚙ di sebelah "Project Overview" (pojok kiri atas) -> "Project settings".
-  // 7. Scroll ke bagian "Your apps" -> klik ikon "</>" (Web) -> kasih nama app -> "Register app".
-  // 8. Firebase akan menampilkan kode berisi object "firebaseConfig" -> salin nilai-nilainya, lalu
-  //    ganti semua tulisan PASTE_ME di bawah ini dengan nilai asli dari Firebase kamu.
-  // 9. Simpan file ini, upload ke GitHub, buka lewat link GitHub Pages seperti biasa.
-  //    Selesai — datanya permanen dan sinkron real-time antara kamu berdua.
+  // 1. Go to https://console.firebase.google.com -> sign in with your Google account -> "Add project" / "Create a project"
+  //    -> give it any name (e.g. "nyoya-diary") -> Continue -> Google Analytics can be turned off -> Create project.
+  // 2. In the project's left sidebar, find "Databases & Storage" (or "Build") -> click "Firestore Database".
+  // 3. Click "Create database" / "Add database" -> choose the "Standard" edition (not Enterprise) -> Next.
+  // 4. Pick a server location (any, e.g. one in Asia) -> Next.
+  // 5. Under security rules, choose the option that says "allow anyone to read and overwrite your data"
+  //    (usually called "test mode") -> Create/Enable.
+  // 6. Click the gear icon ⚙ next to "Project Overview" (top left) -> "Project settings".
+  // 7. Scroll to "Your apps" -> click the "</>" (Web) icon -> give the app a name -> "Register app".
+  // 8. Firebase will show code containing a "firebaseConfig" object -> copy its values, then
+  //    replace every PASTE_ME below with your real values from Firebase.
+  // 9. Save this file, upload it to GitHub, open it via your usual GitHub Pages link.
+  //    Done — the data is now permanent and syncs in real time between both of you.
   const firebaseConfig = {
     apiKey: "AIzaSyATgCutd78kMRTPk9W-wxZaN-vp4xelOvM",
     authDomain: "nyoya-diary.firebaseapp.com",
@@ -645,7 +728,7 @@
     b.textContent = msg;
   }
   if(!firebaseReady){
-    showConnBanner('⚠ Firebase belum disambungkan — isi firebaseConfig di kode (lihat komentar setup di paling atas). Untuk sekarang data hanya tersimpan di HP ini.');
+    showConnBanner('⚠ Firebase is not connected yet — fill in firebaseConfig in the code (see the setup comment at the top). For now, data is only saved on this phone.');
   }
 
   async function saveAll(state){
@@ -684,8 +767,8 @@
     backdrop.innerHTML = `
       <div class="modal-sheet">
         ${forced ? '' : '<button class="close-x">✕</button>'}
-        <h3>Siapa kamu? 💛</h3>
-        <div style="font-size:13px; color:var(--ink-soft); margin-bottom:14px;">Ini supaya setiap tulisan, notes, dan entry tahu siapa yang mengisi.</div>
+        <h3>Who are you? 💛</h3>
+        <div style="font-size:13px; color:var(--ink-soft); margin-bottom:14px;">This is so every entry, note, and message knows who wrote it.</div>
         <button class="ny-btn" id="who-nyoya-btn" style="margin-top:0;">Nyoya</button>
         <button class="ny-btn secondary" id="who-nyanyo-btn" style="margin-top:10px;">Nyanyo</button>
       </div>`;
@@ -782,18 +865,8 @@
   // ---------- shared state persistence ----------
   function applyState(state, isFirstLoad){
     diaryEntries = Array.isArray(state.diaryEntries) ? state.diaryEntries : [];
-    diaryEntries.sort((a,b)=> b.date.localeCompare(a.date));
+    diaryEntries.sort((a,b)=> (b.ts||0) - (a.ts||0));
     renderDiaryList();
-    if(isFirstLoad){
-      const today = diaryEntries.find(e=>e.date===todayStr());
-      if(today){
-        selectedMood = today.mood;
-        document.querySelectorAll('.mood-btn').forEach(b=>{
-          b.classList.toggle('selected', b.dataset.mood === today.mood);
-        });
-        document.getElementById('diary-text').value = today.text || '';
-      }
-    }
     todos = Array.isArray(state.todos) ? state.todos : [];
     renderTodos();
     calNotes = (state.calNotes && typeof state.calNotes === 'object') ? state.calNotes : {};
@@ -831,6 +904,8 @@
     bindOwner();
     bindWhoami();
     bindChat();
+    bindHome();
+    initQuote();
 
     const now = new Date();
     calViewYear = now.getFullYear();
@@ -847,10 +922,249 @@
         applyState(state, isFirst);
       });
       listenChat();
+      listenPosts();
     } else {
       renderDiaryList(); renderTodos(); renderCalendar(); renderMemoryBox();
-      document.getElementById('chat-messages').innerHTML = '<div class="loading-msg">Chat butuh database Firebase — lihat banner di atas.</div>';
+      document.getElementById('chat-messages').innerHTML = '<div class="loading-msg">Chat needs Firebase to be connected — see the banner above.</div>';
+      document.getElementById('home-feed').innerHTML = '<div class="loading-msg">Timeline needs Firebase to be connected — see the banner above.</div>';
     }
+  }
+
+  // ---------- QUOTE OF THE DAY ----------
+  const QUOTES = [
+    "You're the reason I smile at myself in the middle of a tiring day.",
+    "However small your day was, you're still the most amazing person I know.",
+    "Keep going, I'm always right behind you with an umbrella in case it rains.",
+    "You don't have to be perfect today, just honest with yourself.",
+    "Every little thing you do, I see it, and I'm proud of you.",
+    "Resting isn't laziness, it's part of the effort too.",
+    "You're stronger than you think, I'm a witness to that.",
+    "I hope today takes it slow, no need to rush.",
+    "If you're tired, it's okay to pause — that's not the same as giving up.",
+    "You deserve happiness for effort others might not even notice.",
+    "Sending you a long-distance hug, I hope your day feels lighter.",
+    "Whatever happens today, this home (and I) will always be here for you to come back to.",
+    "Don't forget to drink water and tell yourself: I did try today.",
+    "You deserve good things, slowly but surely they'll all arrive.",
+    "Thank you for holding on this far, I know it hasn't been easy.",
+    "Your smile is one of the reasons this world still feels warm to me.",
+    "It's okay if today was just an ordinary day, you can try again tomorrow.",
+    "You're already amazing, you just sometimes forget to tell yourself that.",
+    "Stay strong, love — slow is fine as long as you keep moving.",
+    "I love you not just when you're doing great, but also when you're exhausted.",
+    "You're the coziest home I've ever found.",
+    "You're allowed to cry, allowed to complain, but never forget I'm always listening.",
+    "Today can be messy, as long as you're still here, that's already enough.",
+    "I'm proud of you, not just for what you achieve, but for how you keep trying.",
+    "Every small effort of yours matters, even when it feels like no one notices.",
+    "Good morning/afternoon/night, whenever you read this — you are loved.",
+    "When you're tired, remember: you're not going through this alone.",
+    "You're allowed to be a work in progress, you don't have to be great right away.",
+    "Thank you for being you, that's already more than enough.",
+    "I hope luck and happiness keep coming your way, slowly but surely."
+  ];
+  let quoteIdx = 0;
+  function dayOfYear(){
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    return Math.floor((now - start) / 86400000);
+  }
+  function renderQuote(){
+    const el = document.getElementById('quote-text');
+    if(!el) return;
+    el.style.opacity = 0;
+    setTimeout(()=>{
+      el.textContent = QUOTES[quoteIdx];
+      el.style.opacity = 1;
+    }, 220);
+  }
+  function nextQuote(){
+    quoteIdx = (quoteIdx + 1) % QUOTES.length;
+    renderQuote();
+  }
+  function initQuote(){
+    quoteIdx = dayOfYear() % QUOTES.length;
+    renderQuote();
+    document.getElementById('quote-refresh-btn').addEventListener('click', nextQuote);
+    setInterval(nextQuote, 25000);
+  }
+
+  // ---------- HOME / TIMELINE ----------
+  function postsCollection(){ return db.collection('nyoyaDiaryPosts'); }
+  let postsCache = [];
+  let pendingPostPhoto = null;
+
+  function timeAgo(ts){
+    if(!ts) return '';
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if(mins < 1) return 'baru saja';
+    if(mins < 60) return mins + 'm';
+    const hrs = Math.floor(mins / 60);
+    if(hrs < 24) return hrs + 'j';
+    const days = Math.floor(hrs / 24);
+    if(days < 7) return days + 'h';
+    return niceDate(new Date(ts).toISOString().slice(0,10));
+  }
+
+  function renderPostComposerPreview(){
+    const wrap = document.getElementById('post-photo-preview');
+    if(!pendingPostPhoto){ wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `<img src="${pendingPostPhoto.dataUrl}" style="max-width:140px;border-radius:10px;display:block;margin-top:8px;border:1px solid var(--line);" />
+      <button type="button" id="post-remove-photo-btn" style="margin-top:6px; background:none; border:1px solid var(--line); border-radius:8px; padding:3px 9px; font-size:11px; cursor:pointer; color:var(--ink-soft);">Remove photo</button>`;
+    document.getElementById('post-remove-photo-btn').addEventListener('click', ()=>{
+      pendingPostPhoto = null;
+      renderPostComposerPreview();
+    });
+  }
+
+  function bindHome(){
+    document.getElementById('post-photo-btn').addEventListener('click', ()=>{
+      document.getElementById('post-photo-input').click();
+    });
+    document.getElementById('post-photo-input').addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      try{
+        pendingPostPhoto = { dataUrl: await compressImage(file), name: file.name };
+        renderPostComposerPreview();
+      }catch(err){ console.error('post photo failed', err); }
+      e.target.value = '';
+    });
+    document.getElementById('post-submit-btn').addEventListener('click', submitPost);
+  }
+
+  async function submitPost(){
+    const input = document.getElementById('post-text-input');
+    const text = input.value.trim();
+    if(!text && !pendingPostPhoto) return;
+    if(!firebaseReady) return;
+    const btn = document.getElementById('post-submit-btn');
+    btn.disabled = true;
+    try{
+      await postsCollection().add({
+        author: currentUser || 'Someone',
+        text,
+        photo: pendingPostPhoto,
+        ts: Date.now(),
+        likes: [],
+        comments: [],
+        kind: 'post'
+      });
+      input.value = '';
+      pendingPostPhoto = null;
+      renderPostComposerPreview();
+    }catch(e){ console.error('post failed', e); }
+    btn.disabled = false;
+  }
+
+  // Called whenever a mood/diary entry is saved, so it also shows up as a post
+  // in the Timeline (with its own likes/comments) — each check-in creates its own
+  // post, so a full mood history across the day (and across days) stays visible.
+  async function upsertMoodPost(ts, mood, text){
+    if(!firebaseReady || !mood) return;
+    try{
+      await postsCollection().add({
+        author: currentUser || 'Someone',
+        text: text || '',
+        mood,
+        kind: 'mood',
+        ts: ts || Date.now(),
+        likes: [],
+        comments: []
+      });
+    }catch(e){ console.error('mood post failed', e); }
+  }
+
+  function listenPosts(){
+    if(!firebaseReady) return;
+    postsCollection().orderBy('ts', 'desc').limit(150).onSnapshot(snap=>{
+      setSyncStatus(true);
+      postsCache = [];
+      snap.forEach(doc=> postsCache.push({ id: doc.id, ...doc.data() }));
+      renderFeed();
+    }, err=>{
+      console.error('posts listen failed', err);
+      setSyncStatus(false);
+    });
+  }
+
+  function renderFeed(){
+    const el = document.getElementById('home-feed');
+    if(!postsCache.length){
+      el.innerHTML = '<div class="empty-state"><span class="ny-display">Nothing here yet</span>No stories today yet. Share the first dump! ✨</div>';
+      return;
+    }
+    el.innerHTML = postsCache.map(p=>{
+      const liked = !!(currentUser && (p.likes||[]).includes(currentUser));
+      const moodDef = (p.kind === 'mood' && p.mood) ? MOODS.find(m=>m.key===p.mood) : null;
+      return `<div class="post-card">
+        <div class="post-head">
+          <span class="post-author">${escapeHtml(p.author || '')}</span>
+          ${moodDef ? `<span class="post-mood-badge">${moodIcon(moodDef.key)} ${moodDef.label}</span>` : ''}
+          <span>· ${timeAgo(p.ts)}</span>
+        </div>
+        ${p.photo ? `<img class="post-photo" src="${p.photo.dataUrl}" />` : ''}
+        ${p.text ? `<div class="post-text">${escapeHtml(p.text)}</div>` : ''}
+        <div class="post-actions">
+          <button class="post-like-btn ${liked ? 'liked' : ''}" data-id="${p.id}">${liked ? '💗' : '🤍'} ${(p.likes||[]).length}</button>
+          <button class="post-comment-btn" data-id="${p.id}">💬 ${(p.comments||[]).length}</button>
+        </div>
+        <div class="post-comments" id="comments-${p.id}" style="display:none;">
+          ${(p.comments||[]).map(c=>`<div class="comment-row"><b>${escapeHtml(c.author||'')}:</b> ${escapeHtml(c.text)}</div>`).join('')}
+          <div class="comment-input-row">
+            <input class="ny-input comment-input" data-id="${p.id}" placeholder="Write a comment..." />
+            <button class="comment-send-btn" data-id="${p.id}">Send</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    bindFeedActions();
+  }
+
+  function bindFeedActions(){
+    document.querySelectorAll('.post-like-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.dataset.id;
+        const post = postsCache.find(p=>p.id===id);
+        if(!post) return;
+        const liked = !!(currentUser && (post.likes||[]).includes(currentUser));
+        try{
+          await postsCollection().doc(id).update({
+            likes: liked
+              ? firebase.firestore.FieldValue.arrayRemove(currentUser)
+              : firebase.firestore.FieldValue.arrayUnion(currentUser)
+          });
+        }catch(e){ console.error('like failed', e); }
+      });
+    });
+    document.querySelectorAll('.post-comment-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const sec = document.getElementById('comments-' + btn.dataset.id);
+        if(sec) sec.style.display = (sec.style.display === 'none') ? 'block' : 'none';
+      });
+    });
+    document.querySelectorAll('.comment-send-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=> sendComment(btn.dataset.id));
+    });
+    document.querySelectorAll('.comment-input').forEach(inp=>{
+      inp.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter'){ e.preventDefault(); sendComment(inp.dataset.id); }
+      });
+    });
+  }
+
+  async function sendComment(id){
+    const input = document.querySelector(`.comment-input[data-id="${id}"]`);
+    if(!input) return;
+    const text = input.value.trim();
+    if(!text) return;
+    input.value = '';
+    try{
+      await postsCollection().doc(id).update({
+        comments: firebase.firestore.FieldValue.arrayUnion({ author: currentUser || 'Someone', text, ts: Date.now() })
+      });
+    }catch(e){ console.error('comment failed', e); }
   }
 
   // ---------- CHAT ----------
@@ -860,14 +1174,15 @@
     const el = document.getElementById('chat-messages');
     const wasNearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 80;
     if(!msgs.length){
-      el.innerHTML = '<div class="loading-msg">Belum ada pesan. Mulai obrolan pertama 💬</div>';
+      el.innerHTML = '<div class="loading-msg">No messages yet. Start the first conversation 💬</div>';
       return;
     }
     el.innerHTML = msgs.map(m=>{
       const mine = m.author && currentUser && m.author === currentUser;
       const time = m.ts ? new Date(m.ts).toLocaleString('id-ID', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
       return `<div class="chat-bubble ${mine ? 'me' : 'them'}">
-        ${escapeHtml(m.text)}
+        ${m.photo ? `<img class="chat-photo-img" src="${m.photo.dataUrl}" />` : ''}
+        ${m.text ? escapeHtml(m.text) : ''}
         <span class="chat-meta">${escapeHtml(m.author || '')}${time ? ' · ' + time : ''}</span>
       </div>`;
     }).join('');
@@ -887,9 +1202,24 @@
     });
   }
 
+  let pendingChatPhoto = null;
+  function renderChatPhotoPreview(){
+    const wrap = document.getElementById('chat-photo-preview');
+    if(!pendingChatPhoto){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    wrap.style.display = 'block';
+    wrap.innerHTML = `<img src="${pendingChatPhoto.dataUrl}" />
+      <button type="button" id="chat-photo-remove-btn">Remove photo</button>`;
+    document.getElementById('chat-photo-remove-btn').addEventListener('click', ()=>{
+      pendingChatPhoto = null;
+      renderChatPhotoPreview();
+    });
+  }
+
   function bindChat(){
     const input = document.getElementById('chat-input');
     const sendBtn = document.getElementById('chat-send-btn');
+    const photoBtn = document.getElementById('chat-photo-btn');
+    const photoInput = document.getElementById('chat-photo-input');
     const MAX_ROWS = 10;
 
     function autoGrow(){
@@ -899,13 +1229,28 @@
       input.style.height = Math.min(input.scrollHeight, maxHeight) + 'px';
     }
 
+    photoBtn.addEventListener('click', ()=> photoInput.click());
+    photoInput.addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      try{
+        pendingChatPhoto = { dataUrl: await compressImage(file), name: file.name };
+        renderChatPhotoPreview();
+      }catch(err){ console.error('chat photo failed', err); }
+      e.target.value = '';
+    });
+
     async function send(){
       const text = input.value.trim();
-      if(!text || !firebaseReady) return;
+      if(!text && !pendingChatPhoto) return;
+      if(!firebaseReady) return;
+      const photo = pendingChatPhoto;
       input.value = '';
+      pendingChatPhoto = null;
       autoGrow();
+      renderChatPhotoPreview();
       try{
-        await chatCollection().add({ text, author: currentUser || 'Someone', ts: Date.now() });
+        await chatCollection().add({ text, photo, author: currentUser || 'Someone', ts: Date.now() });
       }catch(e){ console.error('send chat failed', e); }
     }
     sendBtn.addEventListener('click', send);
@@ -942,13 +1287,16 @@
     document.getElementById('save-diary-btn').addEventListener('click', async ()=>{
       const text = document.getElementById('diary-text').value.trim();
       if(!selectedMood && !text){ return; }
+      const now = Date.now();
       const date = todayStr();
-      diaryEntries = diaryEntries.filter(e => e.date !== date);
-      diaryEntries.unshift({ date, mood: selectedMood, text, author: currentUser });
-      diaryEntries.sort((a,b)=> b.date.localeCompare(a.date));
+      diaryEntries.unshift({ id: 'd'+now, date, ts: now, mood: selectedMood, text, author: currentUser });
+      diaryEntries.sort((a,b)=> (b.ts||0) - (a.ts||0));
       const ok = await persist();
+      await upsertMoodPost(now, selectedMood, text);
       renderDiaryList();
       document.getElementById('diary-text').value = '';
+      selectedMood = null;
+      document.querySelectorAll('.mood-btn').forEach(b=>b.classList.remove('selected'));
       const btn = document.getElementById('save-diary-btn');
       const original = btn.textContent;
       btn.textContent = ok ? 'Saved ✓' : 'Could not save, try again';
@@ -964,10 +1312,11 @@
     }
     el.innerHTML = diaryEntries.map(e=>{
       const mood = MOODS.find(m=>m.key===e.mood);
+      const timeLabel = e.ts ? new Date(e.ts).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }) : '';
       return `<div class="entry-row">
         <div class="entry-icon">${mood ? moodIcon(mood.key) : ''}</div>
         <div class="entry-body">
-          <div class="entry-date">${niceDate(e.date)}${mood ? ' · ' + mood.label : ''}${authorTag(e.author)}</div>
+          <div class="entry-date">${niceDate(e.date)}${timeLabel ? ' · ' + timeLabel : ''}${mood ? ' · ' + mood.label : ''}${authorTag(e.author)}</div>
           ${e.text ? `<div class="entry-text">${escapeHtml(e.text)}</div>` : ''}
         </div>
       </div>`;
