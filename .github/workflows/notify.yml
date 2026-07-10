@@ -1,0 +1,29 @@
+name: Push notification checker
+
+on:
+  schedule:
+    # Runs about every 5 minutes (GitHub's minimum interval; actual timing can lag a bit
+    # under load, that's normal and free).
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+  # Lets you click "Run workflow" manually in the Actions tab to test it right away.
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check for new activity and send push notifications
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/notify.js
