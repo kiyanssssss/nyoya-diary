@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <style>
   :root{
     --paper:#F7E9E2;
@@ -519,6 +520,9 @@
       <span class="sync-dot" id="sync-dot"></span>
       <span id="whoami-label">Who am I?</span>
     </button>
+    <button id="notif-btn" title="Enable notifications" style="position:absolute; top:14px; right:48px; background:none; border:none; cursor:pointer; color:var(--ink-soft); padding:4px;">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+    </button>
     <button id="owner-lock-btn" title="Owner mode" style="position:absolute; top:14px; right:14px; background:none; border:none; cursor:pointer; color:var(--ink-soft); padding:4px;">
       <svg id="owner-lock-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
     </button>
@@ -709,6 +713,23 @@
     }
   }catch(e){ console.error('Firebase init failed', e); firebaseReady = false; }
 
+  // ================= REAL PUSH NOTIFICATIONS (optional, free) =================
+  // This makes notifications arrive even when the app/browser is fully closed, using
+  // Firebase Cloud Messaging + a free GitHub Actions job that checks for new activity
+  // every ~5 minutes (no Firebase billing/Blaze plan needed).
+  // 1. In the Firebase console: Project settings -> Cloud Messaging tab -> "Web Push certificates"
+  //    -> "Generate key pair". Copy the key shown -> replace PASTE_VAPID_KEY_HERE below.
+  // 2. Add the file "firebase-messaging-sw.js" (given to you separately) to the ROOT of your
+  //    GitHub repo, same folder as this index.html.
+  // 3. Add the GitHub Actions workflow + script (given separately) to enable the ~5-min checker.
+  const VAPID_KEY = "BF5myY5sOL-LTuOCMmxS-cg7HKGC3rg2NJWpbycYkXZqSp3tRYGdjyTUjcNyDHRSOC78vvVBnuskuo0tMHBKOrw";
+  let messaging = null;
+  try{
+    if(firebaseReady && window.firebase && firebase.messaging){
+      messaging = firebase.messaging();
+    }
+  }catch(e){ console.error('messaging init failed', e); messaging = null; }
+
   function stateDocRef(){ return db.collection('nyoyaDiary').doc('state'); }
 
   function defaultState(){
@@ -729,6 +750,16 @@
   }
   if(!firebaseReady){
     showConnBanner('⚠ Firebase is not connected yet — fill in firebaseConfig in the code (see the setup comment at the top). For now, data is only saved on this phone.');
+  }
+
+  // Lightweight record of "something happened" for the GitHub Actions push-checker to read.
+  // Kept separate from the main state/collections so the checker never has to diff big arrays.
+  function activityCollection(){ return db.collection('nyoyaDiaryActivity'); }
+  async function logActivity(type, extra){
+    if(!firebaseReady) return;
+    try{
+      await activityCollection().add({ type, author: currentUser || 'Someone', ts: Date.now(), ...extra });
+    }catch(e){ console.error('log activity failed', e); }
   }
 
   async function saveAll(state){
@@ -778,9 +809,11 @@
     }
     backdrop.querySelector('#who-nyoya-btn').addEventListener('click', ()=>{
       currentUser = 'Nyoya'; localStorage.setItem(WHOAMI_KEY, currentUser); setWhoamiLabel(); backdrop.remove();
+      if(typeof registerPushToken === 'function') registerPushToken();
     });
     backdrop.querySelector('#who-nyanyo-btn').addEventListener('click', ()=>{
       currentUser = 'Nyanyo'; localStorage.setItem(WHOAMI_KEY, currentUser); setWhoamiLabel(); backdrop.remove();
+      if(typeof registerPushToken === 'function') registerPushToken();
     });
     document.body.appendChild(backdrop);
   }
@@ -863,6 +896,8 @@
   }
 
   // ---------- shared state persistence ----------
+  let stateLoadedOnce = false;
+  let prevMemoryIds = new Set();
   function applyState(state, isFirstLoad){
     diaryEntries = Array.isArray(state.diaryEntries) ? state.diaryEntries : [];
     diaryEntries.sort((a,b)=> (b.ts||0) - (a.ts||0));
@@ -873,6 +908,17 @@
     renderCalendar();
     if(calSelectedDate) renderDayNotes(calSelectedDate);
     memoryBox = Array.isArray(state.memoryBox) ? state.memoryBox : [];
+    if(!stateLoadedOnce){
+      stateLoadedOnce = true;
+      prevMemoryIds = new Set(memoryBox.map(m=>m.id));
+    } else {
+      memoryBox.forEach(m=>{
+        if(!prevMemoryIds.has(m.id) && m.author && m.author !== currentUser){
+          notify('New memory from ' + m.author, m.title || '🎁');
+        }
+      });
+      prevMemoryIds = new Set(memoryBox.map(m=>m.id));
+    }
     if(state.monthlySurprise){
       if(state.monthlySurprise.message) monthlyMsg = state.monthlySurprise.message;
       if('photo' in state.monthlySurprise) monthlyPhoto = state.monthlySurprise.photo;
@@ -906,6 +952,7 @@
     bindChat();
     bindHome();
     initQuote();
+    bindNotifications();
 
     const now = new Date();
     calViewYear = now.getFullYear();
@@ -928,6 +975,66 @@
       document.getElementById('chat-messages').innerHTML = '<div class="loading-msg">Chat needs Firebase to be connected — see the banner above.</div>';
       document.getElementById('home-feed').innerHTML = '<div class="loading-msg">Timeline needs Firebase to be connected — see the banner above.</div>';
     }
+  }
+
+  // ---------- NOTIFICATIONS ----------
+  // These fire while this browser tab/app is open (foreground or backgrounded) — great for
+  // Android (Chrome keeps delivering them even on another tab or app). They will NOT wake up
+  // a fully closed app or a locked phone on either platform; true "wake the phone" push needs
+  // a small server component (Firebase Cloud Functions + FCM), which is a bigger, optional step.
+  function notify(title, body){
+    if(!('Notification' in window)) return;
+    if(Notification.permission !== 'granted') return;
+    try{ new Notification(title, { body: body || '' }); }catch(e){ console.error('notify failed', e); }
+  }
+  function updateNotifBtn(){
+    const btn = document.getElementById('notif-btn');
+    if(!btn || !('Notification' in window)) return;
+    btn.style.color = (Notification.permission === 'granted') ? 'var(--berry)' : 'var(--ink-soft)';
+  }
+  function bindNotifications(){
+    const btn = document.getElementById('notif-btn');
+    if(!btn) return;
+    if(!('Notification' in window)){ btn.style.display = 'none'; return; }
+    updateNotifBtn();
+    btn.addEventListener('click', async ()=>{
+      if(Notification.permission === 'granted'){
+        notify('Notifications are on 💛', "You'll get alerts here for new chat, posts, entries, and memories.");
+        await registerPushToken();
+        return;
+      }
+      if(Notification.permission === 'denied'){
+        alert('Notifications are blocked for this site in your browser settings. Enable them from your browser/site settings to turn this back on.');
+        return;
+      }
+      try{
+        const perm = await Notification.requestPermission();
+        updateNotifBtn();
+        if(perm === 'granted'){
+          notify('Notifications enabled 💛', "You'll now get alerts for new chat, posts, entries, and memories.");
+          await registerPushToken();
+        }
+      }catch(e){ console.error(e); }
+    });
+    if(Notification.permission === 'granted') registerPushToken();
+  }
+
+  // Registers this device for real push notifications (arrive even when the app is closed),
+  // delivered via the free GitHub Actions checker. Safe to call repeatedly.
+  async function registerPushToken(){
+    if(!messaging || !firebaseReady) return;
+    if(!VAPID_KEY || VAPID_KEY.indexOf('PASTE_VAPID_KEY_HERE') !== -1) return;
+    if(!('serviceWorker' in navigator)) return;
+    try{
+      const reg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+      const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+      if(token){
+        await db.collection('nyoyaDiaryTokens').doc(token).set({
+          token, author: currentUser || 'Someone', updatedAt: Date.now(),
+          ua: (navigator.userAgent || '').slice(0, 200)
+        });
+      }
+    }catch(e){ console.error('push token registration failed', e); }
   }
 
   // ---------- QUOTE OF THE DAY ----------
@@ -1054,6 +1161,7 @@
       input.value = '';
       pendingPostPhoto = null;
       renderPostComposerPreview();
+      logActivity('post', { text: (text || '').slice(0, 140) });
     }catch(e){ console.error('post failed', e); }
     btn.disabled = false;
   }
@@ -1073,15 +1181,34 @@
         likes: [],
         comments: []
       });
+      logActivity('diary', { mood, text: (text || '').slice(0, 140) });
     }catch(e){ console.error('mood post failed', e); }
   }
 
+  let postsLoadedOnce = false;
+  let prevPostIds = new Set();
   function listenPosts(){
     if(!firebaseReady) return;
     postsCollection().orderBy('ts', 'desc').limit(150).onSnapshot(snap=>{
       setSyncStatus(true);
       postsCache = [];
       snap.forEach(doc=> postsCache.push({ id: doc.id, ...doc.data() }));
+      if(!postsLoadedOnce){
+        postsLoadedOnce = true;
+        prevPostIds = new Set(postsCache.map(p=>p.id));
+      } else {
+        postsCache.forEach(p=>{
+          if(!prevPostIds.has(p.id) && p.author && p.author !== currentUser){
+            if(p.kind === 'mood'){
+              const moodDef = MOODS.find(m=>m.key===p.mood);
+              notify('New mood update from ' + p.author, (moodDef ? moodDef.label + ' — ' : '') + (p.text || ''));
+            } else {
+              notify('New post from ' + p.author, p.text || (p.photo ? '📷 Photo' : ''));
+            }
+          }
+        });
+        prevPostIds = new Set(postsCache.map(p=>p.id));
+      }
       renderFeed();
     }, err=>{
       console.error('posts listen failed', err);
@@ -1179,7 +1306,7 @@
     }
     el.innerHTML = msgs.map(m=>{
       const mine = m.author && currentUser && m.author === currentUser;
-      const time = m.ts ? new Date(m.ts).toLocaleString('id-ID', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
+      const time = m.ts ? new Date(m.ts).toLocaleString('en-US', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
       return `<div class="chat-bubble ${mine ? 'me' : 'them'}">
         ${m.photo ? `<img class="chat-photo-img" src="${m.photo.dataUrl}" />` : ''}
         ${m.text ? escapeHtml(m.text) : ''}
@@ -1189,12 +1316,25 @@
     if(wasNearBottom) el.scrollTop = el.scrollHeight;
   }
 
+  let chatLoadedOnce = false;
+  let prevChatIds = new Set();
   function listenChat(){
     if(!firebaseReady) return;
     chatCollection().orderBy('ts', 'asc').limitToLast(300).onSnapshot(snap=>{
       setSyncStatus(true);
       const msgs = [];
-      snap.forEach(doc=> msgs.push(doc.data()));
+      snap.forEach(doc=> msgs.push({ id: doc.id, ...doc.data() }));
+      if(!chatLoadedOnce){
+        chatLoadedOnce = true;
+        prevChatIds = new Set(msgs.map(m=>m.id));
+      } else {
+        msgs.forEach(m=>{
+          if(!prevChatIds.has(m.id) && m.author && m.author !== currentUser){
+            notify('New message from ' + m.author, m.text || (m.photo ? '📷 Photo' : ''));
+          }
+        });
+        prevChatIds = new Set(msgs.map(m=>m.id));
+      }
       renderChatMessages(msgs);
     }, err=>{
       console.error('chat listen failed', err);
@@ -1251,6 +1391,7 @@
       renderChatPhotoPreview();
       try{
         await chatCollection().add({ text, photo, author: currentUser || 'Someone', ts: Date.now() });
+        logActivity('chat', { text: text ? text.slice(0, 140) : (photo ? '📷 Photo' : '') });
       }catch(e){ console.error('send chat failed', e); }
     }
     sendBtn.addEventListener('click', send);
@@ -1539,6 +1680,7 @@
     document.getElementById('mb-add-form').style.display = 'none';
     renderMemoryBox();
     await persist();
+    logActivity('memory', { title });
   }
 
   function isUnlocked(item){
