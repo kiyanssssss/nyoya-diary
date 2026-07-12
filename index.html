@@ -530,6 +530,12 @@
     display:flex; align-items:center; justify-content:center; font-size:17px;
   }
   .music-listeners{ text-align:center; font-size:11px; color:rgba(255,255,255,0.45); }
+  .music-unlock-banner{
+    display:none; align-items:center; justify-content:center; gap:8px;
+    background:rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px;
+    margin-bottom:14px; font-size:13px; color:#fff; cursor:pointer; text-align:center;
+  }
+  .music-unlock-banner.show{ display:flex; }
   .queue-row, .search-result-row{
     display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line);
   }
@@ -554,6 +560,7 @@
 </style>
 </head>
 <body>
+<div id="youtube-player-container" style="position:fixed; bottom:0; left:0; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; z-index:-1;"></div>
 <div id="ny-app">
   <div id="conn-banner" class="conn-banner" style="display:none;"></div>
   <div class="ny-header">
@@ -692,6 +699,7 @@
     <!-- MUSIC TAB -->
     <div class="ny-tab" id="tab-music">
       <div class="ny-card music-player-card">
+        <div class="music-unlock-banner" id="music-unlock-banner">🔊 Tap here so this device can play the shared music</div>
         <div class="music-now-playing">
           <img id="music-art" class="music-art" style="display:none;" />
           <div class="music-art-placeholder" id="music-art-placeholder">🎵</div>
@@ -724,7 +732,12 @@
       <div class="ny-section-title">Queue</div>
       <div id="music-queue-list"><div class="empty-state">Queue is empty — search for a song above to add one.</div></div>
 
-      <div id="youtube-player-container" style="position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
+      <div class="ny-section-title">Playlists</div>
+      <div style="display:flex; gap:8px;">
+        <input class="ny-input" id="playlist-name-input" placeholder="New playlist name..." style="margin:0;" />
+        <button class="ny-btn" id="playlist-create-btn" style="margin-top:0; width:auto; padding:9px 16px;">Save queue as playlist</button>
+      </div>
+      <div id="music-playlist-list"><div class="empty-state">No playlists yet — search songs, build a queue, then save it above.</div></div>
     </div>
 
   </div>
@@ -1055,6 +1068,8 @@
       listenChat();
       listenPosts();
       listenMusic();
+      listenPlaylists();
+      calibrateServerTime();
     } else {
       renderDiaryList(); renderTodos(); renderCalendar(); renderMemoryBox();
       document.getElementById('chat-messages').innerHTML = '<div class="loading-msg">Chat needs Firebase to be connected — see the banner above.</div>';
@@ -1080,6 +1095,8 @@
   const YOUTUBE_API_KEY = "AIzaSyCeP5TtS14rNIvMrz9JVKaPDMa9IYYmzlQ";
 
   function musicDocRef(){ return db.collection('nyoyaDiaryMusic').doc('room'); }
+  function playlistsRef(){ return db.collection('nyoyaDiaryPlaylists'); }
+  let playlists = [];
 
   let ytPlayer = null;
   let ytReady = false;
@@ -1090,6 +1107,48 @@
   let suppressSync = false;
   let lastLoadedVideoId = null;
   let roomData = null;
+  let lastMusicSearchError = null;
+  let serverTimeOffset = 0;
+
+  // Every device's clock is slightly different, which used to cause the "position" math
+  // to drift out of sync between phones. This measures how far off THIS device's clock is
+  // from Firebase's server clock, once, so all sync math below is corrected for it.
+  async function calibrateServerTime(){
+    if(!firebaseReady) return;
+    try{
+      const ref = db.collection('nyoyaDiaryMusic').doc('_timeSync');
+      const t0 = Date.now();
+      await ref.set({ ts: firebase.firestore.FieldValue.serverTimestamp() });
+      const snap = await ref.get({ source: 'server' });
+      const tsVal = snap.data() && snap.data().ts;
+      if(tsVal && tsVal.toMillis){
+        const serverMs = tsVal.toMillis();
+        const t1 = Date.now();
+        serverTimeOffset = serverMs - ((t0 + t1) / 2);
+      }
+    }catch(e){ console.error('server time calibration failed', e); }
+  }
+  function nowMs(){ return Date.now() + serverTimeOffset; }
+
+  // Browsers block audio from auto-playing until the person on THIS device has directly
+  // tapped something on the page. Without this, joining a session someone else started
+  // would look "stuck" or silent on the second phone. This shows a one-tap prompt.
+  let audioUnlocked = false;
+  function updateUnlockBanner(){
+    const banner = document.getElementById('music-unlock-banner');
+    if(!banner) return;
+    banner.classList.toggle('show', !audioUnlocked && !!currentTrack && isPlaying);
+  }
+  function unlockAudio(){
+    audioUnlocked = true;
+    const banner = document.getElementById('music-unlock-banner');
+    if(banner) banner.classList.remove('show');
+    if(ytPlayer && ytReady && currentTrack){
+      try{
+        if(isPlaying) ytPlayer.playVideo();
+      }catch(e){ console.error('unlock audio failed', e); }
+    }
+  }
 
   function formatTime(s){
     s = Math.floor(s || 0);
@@ -1140,7 +1199,7 @@
     try{
       await musicDocRef().set({
         ...partial,
-        updatedAt: Date.now(),
+        updatedAt: nowMs(),
         updatedBy: currentUser || 'Someone'
       }, { merge: true });
     }catch(e){ console.error('update music state failed', e); }
@@ -1153,7 +1212,7 @@
         videoId: track.videoId, title: track.title, artist: track.artist,
         thumbnail: track.thumbnail, duration: track.duration || 0,
         position: 0, isPlaying: true,
-        updatedAt: Date.now(), updatedBy: currentUser || 'Someone',
+        updatedAt: nowMs(), updatedBy: currentUser || 'Someone',
         queue: firebase.firestore.FieldValue.arrayRemove(track)
       }, { merge: true });
     }catch(e){ console.error('play track failed', e); }
@@ -1192,6 +1251,8 @@
       artEl.style.display = 'none';
       placeholder.style.display = 'flex';
       playBtn.textContent = '▶';
+      const banner = document.getElementById('music-unlock-banner');
+      if(banner) banner.classList.remove('show');
       return;
     }
     titleEl.textContent = currentTrack.title;
@@ -1200,6 +1261,7 @@
     artEl.style.display = 'block';
     placeholder.style.display = 'none';
     playBtn.textContent = isPlaying ? '⏸' : '▶';
+    updateUnlockBanner();
   }
 
   function renderMusicListeners(updatedBy){
@@ -1250,7 +1312,7 @@
   function syncPlayback(data){
     if(!ytReady || !ytPlayer) return;
     const expectedPos = data.isPlaying
-      ? (data.position || 0) + (Date.now() - (data.updatedAt || Date.now())) / 1000
+      ? (data.position || 0) + (nowMs() - (data.updatedAt || nowMs())) / 1000
       : (data.position || 0);
     suppressSync = true;
     try{
@@ -1290,10 +1352,19 @@
       return [];
     }
     try{
-      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=8&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=relevance&maxResults=12&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
       const searchRes = await fetch(searchUrl);
       const searchData = await searchRes.json();
-      if(searchData.error){ console.error(searchData.error); return []; }
+      if(searchData.error){
+        console.error(searchData.error);
+        const reason = (searchData.error.errors && searchData.error.errors[0] && searchData.error.errors[0].reason) || searchData.error.status || '';
+        let msg = searchData.error.message || 'Search failed.';
+        if(reason === 'quotaExceeded'){ msg = 'YouTube search quota for today is used up — try again tomorrow, or create a new API key.'; }
+        else if(String(searchData.error.code) === '403'){ msg += ' (check that YouTube Data API v3 is enabled, and that your API key\'s HTTP referrer restriction includes this site\'s URL)'; }
+        lastMusicSearchError = msg;
+        return [];
+      }
+      lastMusicSearchError = null;
       const items = searchData.items || [];
       const ids = items.map(it=>it.id.videoId).join(',');
       let durations = {};
@@ -1309,7 +1380,7 @@
         thumbnail: it.snippet.thumbnails.medium.url,
         duration: durations[it.id.videoId] || 0
       }));
-    }catch(e){ console.error('music search failed', e); return []; }
+    }catch(e){ console.error('music search failed', e); lastMusicSearchError = 'Network error while searching — check your connection.'; return []; }
   }
 
   async function doMusicSearch(){
@@ -1318,7 +1389,10 @@
     const el = document.getElementById('music-search-results');
     el.innerHTML = '<div class="loading-msg">Searching...</div>';
     const results = await searchMusic(q);
-    if(!results.length){ el.innerHTML = '<div class="empty-state">No results. Try another search.</div>'; return; }
+    if(!results.length){
+      el.innerHTML = `<div class="empty-state">${lastMusicSearchError ? escapeHtml(lastMusicSearchError) : 'No results. Try another search.'}</div>`;
+      return;
+    }
     el.innerHTML = results.map((t, i)=>`
       <div class="search-result-row">
         <img src="${t.thumbnail}" class="queue-thumb" />
@@ -1329,8 +1403,83 @@
         <button class="queue-add-btn" data-idx="${i}">+ Add</button>
       </div>`).join('');
     el.querySelectorAll('.queue-add-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=> addToQueue(results[parseInt(btn.dataset.idx, 10)]));
+      btn.addEventListener('click', ()=>{ audioUnlocked = true; addToQueue(results[parseInt(btn.dataset.idx, 10)]); });
     });
+  }
+
+  async function createPlaylistFromQueue(){
+    if(!firebaseReady) return;
+    const input = document.getElementById('playlist-name-input');
+    const name = input.value.trim();
+    if(!name){ alert('Give the playlist a name first.'); return; }
+    const tracks = currentTrack ? [currentTrack, ...musicQueue] : musicQueue;
+    if(!tracks.length){ alert('Nothing to save — add a song to the queue first.'); return; }
+    try{
+      await playlistsRef().add({
+        name, tracks, createdBy: currentUser || 'Someone', createdAt: Date.now()
+      });
+      input.value = '';
+      logActivity('music', { text: `Created playlist "${name}"` });
+    }catch(e){ console.error('create playlist failed', e); alert('Could not save playlist — check the console.'); }
+  }
+
+  async function loadPlaylist(playlist){
+    if(!firebaseReady || !playlist.tracks || !playlist.tracks.length) return;
+    try{
+      const [first, ...rest] = playlist.tracks;
+      await musicDocRef().set({
+        videoId: first.videoId, title: first.title, artist: first.artist,
+        thumbnail: first.thumbnail, duration: first.duration || 0,
+        position: 0, isPlaying: true,
+        updatedAt: nowMs(), updatedBy: currentUser || 'Someone',
+        queue: rest
+      }, { merge: true });
+      logActivity('music', { text: `Started playlist "${playlist.name}"` });
+    }catch(e){ console.error('load playlist failed', e); }
+  }
+
+  async function deletePlaylist(id){
+    if(!firebaseReady) return;
+    try{ await playlistsRef().doc(id).delete(); }
+    catch(e){ console.error('delete playlist failed', e); }
+  }
+
+  function renderPlaylists(){
+    const el = document.getElementById('music-playlist-list');
+    if(!el) return;
+    if(!playlists.length){
+      el.innerHTML = '<div class="empty-state">No playlists yet — search songs, build a queue, then save it above.</div>';
+      return;
+    }
+    el.innerHTML = playlists.map(p => `
+      <div class="queue-row">
+        <div class="queue-info">
+          <div class="queue-title">${escapeHtml(p.name)}</div>
+          <div class="queue-artist">${(p.tracks || []).length} song${(p.tracks || []).length === 1 ? '' : 's'}</div>
+        </div>
+        <button class="queue-add-btn" data-id="${p.id}" data-action="play">▶ Play</button>
+        <button class="queue-remove-btn" data-id="${p.id}" data-action="delete">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('[data-action="play"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        audioUnlocked = true;
+        const p = playlists.find(pl => pl.id === btn.dataset.id);
+        if(p) loadPlaylist(p);
+      });
+    });
+    el.querySelectorAll('[data-action="delete"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(confirm('Delete this playlist?')) deletePlaylist(btn.dataset.id);
+      });
+    });
+  }
+
+  function listenPlaylists(){
+    if(!firebaseReady) return;
+    playlistsRef().orderBy('createdAt', 'desc').onSnapshot(snap=>{
+      playlists = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderPlaylists();
+    }, err=>{ console.error('playlists listen failed', err); });
   }
 
   async function toggleMusicPlay(){
@@ -1348,7 +1497,9 @@
     document.getElementById('music-search-input').addEventListener('keydown', (e)=>{
       if(e.key === 'Enter'){ e.preventDefault(); doMusicSearch(); }
     });
-    document.getElementById('music-play-btn').addEventListener('click', toggleMusicPlay);
+    document.getElementById('music-play-btn').addEventListener('click', ()=>{ audioUnlocked = true; toggleMusicPlay(); });
+    document.getElementById('music-unlock-banner').addEventListener('click', unlockAudio);
+    document.getElementById('playlist-create-btn').addEventListener('click', createPlaylistFromQueue);
     document.getElementById('music-next-btn').addEventListener('click', ()=> playNextInQueue());
     document.getElementById('music-prev-btn').addEventListener('click', async ()=>{
       if(ytPlayer && ytReady) ytPlayer.seekTo(0, true);
