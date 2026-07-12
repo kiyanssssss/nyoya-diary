@@ -355,22 +355,24 @@
     background:var(--white);
     border-top:1px solid var(--line);
     display:flex;
+    overflow-x:auto;
     padding:8px 6px calc(8px + env(safe-area-inset-bottom));
     max-width:460px;
     margin:0 auto;
   }
   .nav-btn{
-    flex:1;
+    flex:0 0 auto;
+    width:64px;
     background:none; border:none;
     display:flex; flex-direction:column; align-items:center; gap:3px;
     color:var(--ink-soft);
     cursor:pointer;
     padding:6px 2px;
     font-family:'Karla',sans-serif;
-    font-size:10.5px;
+    font-size:10px;
     font-weight:700;
   }
-  .nav-btn svg{width:21px;height:21px;}
+  .nav-btn svg{width:20px;height:20px;}
   .nav-btn.active{color:var(--berry);}
 
   .modal-backdrop{
@@ -502,6 +504,45 @@
     background:var(--berry); color:#fff; border:none; border-radius:8px;
     padding:0 12px; font-size:12.5px; font-weight:700; cursor:pointer;
   }
+
+  /* Music / Listen Together */
+  .music-player-card{
+    background:linear-gradient(160deg, #1c1420, #2a1b28);
+    color:#fff; padding:20px;
+  }
+  .music-now-playing{ display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .music-art, .music-art-placeholder{
+    width:60px; height:60px; border-radius:10px; object-fit:cover; flex-shrink:0;
+  }
+  .music-art-placeholder{
+    display:flex; align-items:center; justify-content:center; font-size:24px;
+    background:rgba(255,255,255,0.08);
+  }
+  .music-info{ min-width:0; flex:1; }
+  .music-title{ font-weight:700; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .music-artist{ font-size:12.5px; color:rgba(255,255,255,0.6); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .music-progress-row{ display:flex; align-items:center; gap:8px; font-size:11px; color:rgba(255,255,255,0.6); margin-bottom:14px; }
+  .music-progress-row input[type=range]{ flex:1; accent-color:var(--gold); height:4px; }
+  .music-controls{ display:flex; align-items:center; justify-content:center; gap:24px; margin-bottom:10px; }
+  .music-ctrl-btn{ background:none; border:none; color:#fff; font-size:20px; cursor:pointer; padding:6px; }
+  .music-play-main{
+    background:#fff; color:#1c1420; width:46px; height:46px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:17px;
+  }
+  .music-listeners{ text-align:center; font-size:11px; color:rgba(255,255,255,0.45); }
+  .queue-row, .search-result-row{
+    display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--line);
+  }
+  .queue-row:last-child, .search-result-row:last-child{ border-bottom:none; }
+  .queue-thumb{ width:44px; height:44px; border-radius:8px; object-fit:cover; flex-shrink:0; background:var(--paper-deep); }
+  .queue-info{ flex:1; min-width:0; }
+  .queue-title{ font-size:13.5px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .queue-artist{ font-size:11.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .queue-remove-btn, .queue-add-btn{
+    background:none; border:1px solid var(--line); border-radius:8px; padding:5px 10px;
+    font-size:11.5px; cursor:pointer; color:var(--ink-soft); flex-shrink:0;
+  }
+  .queue-add-btn{ background:var(--berry); color:#fff; border:none; font-weight:700; }
   html, body{
     margin:0;
     padding:0;
@@ -648,6 +689,44 @@
       </div>
     </div>
 
+    <!-- MUSIC TAB -->
+    <div class="ny-tab" id="tab-music">
+      <div class="ny-card music-player-card">
+        <div class="music-now-playing">
+          <img id="music-art" class="music-art" style="display:none;" />
+          <div class="music-art-placeholder" id="music-art-placeholder">🎵</div>
+          <div class="music-info">
+            <div class="music-title" id="music-title">Nothing playing</div>
+            <div class="music-artist" id="music-artist">Search a song to start listening together</div>
+          </div>
+        </div>
+        <div class="music-progress-row">
+          <span id="music-time-current">0:00</span>
+          <input type="range" id="music-seek" min="0" max="100" value="0" />
+          <span id="music-time-total">0:00</span>
+        </div>
+        <div class="music-controls">
+          <button class="music-ctrl-btn" id="music-prev-btn" title="Restart">⏮</button>
+          <button class="music-ctrl-btn music-play-main" id="music-play-btn" title="Play/Pause">▶</button>
+          <button class="music-ctrl-btn" id="music-next-btn" title="Next in queue">⏭</button>
+        </div>
+        <div class="music-listeners" id="music-listeners"></div>
+      </div>
+
+      <div class="ny-card">
+        <div style="display:flex; gap:8px;">
+          <input class="ny-input" id="music-search-input" placeholder="Search a song or artist..." style="margin:0;" />
+          <button class="ny-btn" id="music-search-btn" style="margin-top:0; width:auto; padding:9px 16px;">Search</button>
+        </div>
+        <div id="music-search-results"></div>
+      </div>
+
+      <div class="ny-section-title">Queue</div>
+      <div id="music-queue-list"><div class="empty-state">Queue is empty — search for a song above to add one.</div></div>
+
+      <div id="youtube-player-container" style="position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none;"></div>
+    </div>
+
   </div>
 
   <div class="ny-nav">
@@ -674,6 +753,10 @@
     <button class="nav-btn" data-tab="chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
       Chat
+    </button>
+    <button class="nav-btn" data-tab="music">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      Music
     </button>
   </div>
 </div>
@@ -722,7 +805,7 @@
   // 2. Add the file "firebase-messaging-sw.js" (given to you separately) to the ROOT of your
   //    GitHub repo, same folder as this index.html.
   // 3. Add the GitHub Actions workflow + script (given separately) to enable the ~5-min checker.
-  const VAPID_KEY = "BF5myY5sOL-LTuOCMmxS-cg7HKGC3rg2NJWpbycYkXZqSp3tRYGdjyTUjcNyDHRSOC78vvVBnuskuo0tMHBKOrw";
+  const VAPID_KEY = "PASTE_VAPID_KEY_HERE";
   let messaging = null;
   try{
     if(firebaseReady && window.firebase && firebase.messaging){
@@ -953,6 +1036,7 @@
     bindHome();
     initQuote();
     bindNotifications();
+    bindMusic();
 
     const now = new Date();
     calViewYear = now.getFullYear();
@@ -970,11 +1054,326 @@
       });
       listenChat();
       listenPosts();
+      listenMusic();
     } else {
       renderDiaryList(); renderTodos(); renderCalendar(); renderMemoryBox();
       document.getElementById('chat-messages').innerHTML = '<div class="loading-msg">Chat needs Firebase to be connected — see the banner above.</div>';
       document.getElementById('home-feed').innerHTML = '<div class="loading-msg">Timeline needs Firebase to be connected — see the banner above.</div>';
+      document.getElementById('music-queue-list').innerHTML = '<div class="loading-msg">Music needs Firebase to be connected — see the banner above.</div>';
     }
+  }
+
+  // ---------- MUSIC / LISTEN TOGETHER ----------
+  // Uses YouTube (free, legal streaming via YouTube's own official embed/IFrame API — no
+  // audio files are hosted by this app) for playback, with a Spotify-style UI on top, and
+  // Firestore to keep play/pause/seek/queue perfectly in sync between both of you in real time.
+  //
+  // Setup needed (free, no credit card):
+  // 1. Go to https://console.cloud.google.com -> pick/create the SAME project as your Firebase
+  //    project (top project switcher) -> "APIs & Services" -> "Library" -> search
+  //    "YouTube Data API v3" -> Enable.
+  // 2. "APIs & Services" -> "Credentials" -> "Create credentials" -> "API key". Copy it.
+  // 3. (Recommended) Click the new key -> under "Application restrictions" choose
+  //    "HTTP referrers" -> add your GitHub Pages URL (e.g. https://yourname.github.io/*) so
+  //    only your site can use it.
+  // 4. Replace PASTE_YOUTUBE_API_KEY_HERE below with your real key.
+  const YOUTUBE_API_KEY = "AIzaSyCeP5TtS14rNIvMrz9JVKaPDMa9IYYmzlQ";
+
+  function musicDocRef(){ return db.collection('nyoyaDiaryMusic').doc('room'); }
+
+  let ytPlayer = null;
+  let ytReady = false;
+  let musicQueue = [];
+  let currentTrack = null;
+  let isPlaying = false;
+  let seekDragging = false;
+  let suppressSync = false;
+  let lastLoadedVideoId = null;
+  let roomData = null;
+
+  function formatTime(s){
+    s = Math.floor(s || 0);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function parseISODuration(iso){
+    const m = (iso || '').match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if(!m) return 0;
+    const h = parseInt(m[1] || 0, 10), mi = parseInt(m[2] || 0, 10), s = parseInt(m[3] || 0, 10);
+    return h * 3600 + mi * 60 + s;
+  }
+
+  function loadYouTubeAPI(){
+    return new Promise((resolve)=>{
+      if(window.YT && window.YT.Player){ resolve(); return; }
+      window.onYouTubeIframeAPIReady = ()=> resolve();
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    });
+  }
+
+  async function initMusicPlayer(){
+    if(!firebaseReady) return;
+    await loadYouTubeAPI();
+    ytPlayer = new YT.Player('youtube-player-container', {
+      height: '1', width: '1',
+      playerVars: { autoplay: 0, controls: 0, disablekb: 1, modestbranding: 1, playsinline: 1 },
+      events: {
+        onReady: ()=>{ ytReady = true; if(roomData) applyPlayerSync(roomData); },
+        onStateChange: onPlayerStateChange
+      }
+    });
+  }
+
+  function onPlayerStateChange(e){
+    if(suppressSync) return;
+    if(window.YT && e.data === YT.PlayerState.ENDED){
+      playNextInQueue();
+    }
+  }
+
+  async function updateMusicState(partial){
+    if(!firebaseReady) return;
+    try{
+      await musicDocRef().set({
+        ...partial,
+        updatedAt: Date.now(),
+        updatedBy: currentUser || 'Someone'
+      }, { merge: true });
+    }catch(e){ console.error('update music state failed', e); }
+  }
+
+  async function playTrackNow(track){
+    if(!firebaseReady) return;
+    try{
+      await musicDocRef().set({
+        videoId: track.videoId, title: track.title, artist: track.artist,
+        thumbnail: track.thumbnail, duration: track.duration || 0,
+        position: 0, isPlaying: true,
+        updatedAt: Date.now(), updatedBy: currentUser || 'Someone',
+        queue: firebase.firestore.FieldValue.arrayRemove(track)
+      }, { merge: true });
+    }catch(e){ console.error('play track failed', e); }
+  }
+
+  async function playNextInQueue(){
+    if(!musicQueue.length){
+      await updateMusicState({ isPlaying: false });
+      return;
+    }
+    await playTrackNow(musicQueue[0]);
+  }
+
+  async function addToQueue(track){
+    if(!firebaseReady) return;
+    try{
+      await musicDocRef().set({
+        queue: firebase.firestore.FieldValue.arrayUnion(track)
+      }, { merge: true });
+      if(!currentTrack){
+        await playTrackNow(track);
+      }
+      logActivity('music', { text: `Added "${track.title}" to the queue` });
+    }catch(e){ console.error('add to queue failed', e); }
+  }
+
+  function renderNowPlaying(){
+    const titleEl = document.getElementById('music-title');
+    const artistEl = document.getElementById('music-artist');
+    const artEl = document.getElementById('music-art');
+    const placeholder = document.getElementById('music-art-placeholder');
+    const playBtn = document.getElementById('music-play-btn');
+    if(!currentTrack){
+      titleEl.textContent = 'Nothing playing';
+      artistEl.textContent = 'Search a song to start listening together';
+      artEl.style.display = 'none';
+      placeholder.style.display = 'flex';
+      playBtn.textContent = '▶';
+      return;
+    }
+    titleEl.textContent = currentTrack.title;
+    artistEl.textContent = currentTrack.artist;
+    artEl.src = currentTrack.thumbnail;
+    artEl.style.display = 'block';
+    placeholder.style.display = 'none';
+    playBtn.textContent = isPlaying ? '⏸' : '▶';
+  }
+
+  function renderMusicListeners(updatedBy){
+    const el = document.getElementById('music-listeners');
+    if(!el) return;
+    el.textContent = updatedBy ? `Synced · last touched by ${updatedBy}` : '';
+  }
+
+  function renderQueue(){
+    const el = document.getElementById('music-queue-list');
+    if(!musicQueue.length){
+      el.innerHTML = '<div class="empty-state">Queue is empty — search for a song above to add one.</div>';
+      return;
+    }
+    el.innerHTML = musicQueue.map((t, i)=>`
+      <div class="queue-row">
+        <img src="${t.thumbnail}" class="queue-thumb" />
+        <div class="queue-info">
+          <div class="queue-title">${escapeHtml(t.title)}</div>
+          <div class="queue-artist">${escapeHtml(t.artist)}${t.duration ? ' · ' + formatTime(t.duration) : ''}</div>
+        </div>
+        <button class="queue-remove-btn" data-idx="${i}">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('.queue-remove-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const idx = parseInt(btn.dataset.idx, 10);
+        const track = musicQueue[idx];
+        if(!track) return;
+        try{
+          await musicDocRef().set({ queue: firebase.firestore.FieldValue.arrayRemove(track) }, { merge: true });
+        }catch(e){ console.error('remove from queue failed', e); }
+      });
+    });
+  }
+
+  function applyPlayerSync(data){
+    if(!ytReady || !ytPlayer || !data.videoId) return;
+    if(lastLoadedVideoId !== data.videoId){
+      lastLoadedVideoId = data.videoId;
+      suppressSync = true;
+      ytPlayer.cueVideoById(data.videoId);
+      setTimeout(()=> syncPlayback(data), 500);
+      return;
+    }
+    syncPlayback(data);
+  }
+
+  function syncPlayback(data){
+    if(!ytReady || !ytPlayer) return;
+    const expectedPos = data.isPlaying
+      ? (data.position || 0) + (Date.now() - (data.updatedAt || Date.now())) / 1000
+      : (data.position || 0);
+    suppressSync = true;
+    try{
+      const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+      if(Math.abs(cur - expectedPos) > 1.5){
+        ytPlayer.seekTo(Math.max(expectedPos, 0), true);
+      }
+      if(data.isPlaying) ytPlayer.playVideo();
+      else ytPlayer.pauseVideo();
+    }catch(e){ console.error('sync playback failed', e); }
+    setTimeout(()=>{ suppressSync = false; }, 700);
+  }
+
+  function listenMusic(){
+    if(!firebaseReady) return;
+    musicDocRef().onSnapshot(snap=>{
+      const data = snap.exists ? snap.data() : {};
+      roomData = data;
+      musicQueue = Array.isArray(data.queue) ? data.queue : [];
+      renderQueue();
+      isPlaying = !!data.isPlaying;
+      if(data.videoId){
+        currentTrack = { videoId: data.videoId, title: data.title, artist: data.artist, thumbnail: data.thumbnail, duration: data.duration || 0 };
+        renderNowPlaying();
+        applyPlayerSync(data);
+      } else {
+        currentTrack = null;
+        renderNowPlaying();
+      }
+      renderMusicListeners(data.updatedBy);
+    }, err=>{ console.error('music listen failed', err); });
+  }
+
+  async function searchMusic(query){
+    if(!YOUTUBE_API_KEY || YOUTUBE_API_KEY.indexOf('PASTE_YOUTUBE_API_KEY_HERE') !== -1){
+      alert('Add your YouTube Data API key in the code first — see the setup comment near YOUTUBE_API_KEY.');
+      return [];
+    }
+    try{
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=8&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+      const searchRes = await fetch(searchUrl);
+      const searchData = await searchRes.json();
+      if(searchData.error){ console.error(searchData.error); return []; }
+      const items = searchData.items || [];
+      const ids = items.map(it=>it.id.videoId).join(',');
+      let durations = {};
+      if(ids){
+        const durRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids}&key=${YOUTUBE_API_KEY}`);
+        const durData = await durRes.json();
+        (durData.items || []).forEach(v=>{ durations[v.id] = parseISODuration(v.contentDetails.duration); });
+      }
+      return items.map(it=>({
+        videoId: it.id.videoId,
+        title: it.snippet.title,
+        artist: it.snippet.channelTitle,
+        thumbnail: it.snippet.thumbnails.medium.url,
+        duration: durations[it.id.videoId] || 0
+      }));
+    }catch(e){ console.error('music search failed', e); return []; }
+  }
+
+  async function doMusicSearch(){
+    const q = document.getElementById('music-search-input').value.trim();
+    if(!q) return;
+    const el = document.getElementById('music-search-results');
+    el.innerHTML = '<div class="loading-msg">Searching...</div>';
+    const results = await searchMusic(q);
+    if(!results.length){ el.innerHTML = '<div class="empty-state">No results. Try another search.</div>'; return; }
+    el.innerHTML = results.map((t, i)=>`
+      <div class="search-result-row">
+        <img src="${t.thumbnail}" class="queue-thumb" />
+        <div class="queue-info">
+          <div class="queue-title">${escapeHtml(t.title)}</div>
+          <div class="queue-artist">${escapeHtml(t.artist)}${t.duration ? ' · ' + formatTime(t.duration) : ''}</div>
+        </div>
+        <button class="queue-add-btn" data-idx="${i}">+ Add</button>
+      </div>`).join('');
+    el.querySelectorAll('.queue-add-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=> addToQueue(results[parseInt(btn.dataset.idx, 10)]));
+    });
+  }
+
+  async function toggleMusicPlay(){
+    if(!currentTrack){
+      if(musicQueue.length) await playNextInQueue();
+      return;
+    }
+    const playing = !isPlaying;
+    const pos = (ytPlayer && ytReady) ? ytPlayer.getCurrentTime() : ((roomData && roomData.position) || 0);
+    await updateMusicState({ isPlaying: playing, position: pos });
+  }
+
+  function bindMusic(){
+    document.getElementById('music-search-btn').addEventListener('click', doMusicSearch);
+    document.getElementById('music-search-input').addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); doMusicSearch(); }
+    });
+    document.getElementById('music-play-btn').addEventListener('click', toggleMusicPlay);
+    document.getElementById('music-next-btn').addEventListener('click', ()=> playNextInQueue());
+    document.getElementById('music-prev-btn').addEventListener('click', async ()=>{
+      if(ytPlayer && ytReady) ytPlayer.seekTo(0, true);
+      await updateMusicState({ position: 0 });
+    });
+    const seek = document.getElementById('music-seek');
+    seek.addEventListener('mousedown', ()=>{ seekDragging = true; });
+    seek.addEventListener('touchstart', ()=>{ seekDragging = true; });
+    seek.addEventListener('change', async ()=>{
+      const dur = currentTrack ? (currentTrack.duration || 0) : 0;
+      const pos = (seek.value / 100) * dur;
+      if(ytPlayer && ytReady) ytPlayer.seekTo(pos, true);
+      await updateMusicState({ position: pos });
+      seekDragging = false;
+    });
+    initMusicPlayer();
+    setInterval(()=>{
+      if(!ytPlayer || !ytReady || !currentTrack || seekDragging) return;
+      const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+      const dur = currentTrack.duration || (ytPlayer.getDuration ? ytPlayer.getDuration() : 0);
+      const seekEl = document.getElementById('music-seek');
+      if(seekEl) seekEl.value = dur ? (cur / dur * 100) : 0;
+      document.getElementById('music-time-current').textContent = formatTime(cur);
+      document.getElementById('music-time-total').textContent = formatTime(dur);
+    }, 1000);
   }
 
   // ---------- NOTIFICATIONS ----------
