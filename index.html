@@ -988,7 +988,7 @@
         </div>
         <div class="music-listeners" id="music-listeners"></div>
         <div id="spotify-embed-holder"></div>
-        <div class="music-source-note" id="music-source-note">🎧 Tip: paste a Spotify song link to play it ad-free through Spotify itself (full song if you're logged into Spotify Premium in this browser, 30s preview otherwise). YouTube links may show YouTube's own ads — that's outside this app's control. Once something is playing, lock your phone screen — controls stay on your lock screen and music keeps going as long as this tab stays open in the background.</div>
+        <a id="spotify-open-app-btn" class="ny-btn secondary" style="display:none; margin-top:10px; text-align:center; text-decoration:none;" href="#" target="_blank" rel="noopener">🎧 Buka lagu penuh di Spotify</a>
       </div>
 
       <div class="ny-card">
@@ -1025,7 +1025,7 @@
           <button class="ny-btn secondary" id="watch-open-tab-btn" style="margin-top:0; padding:9px 14px;">Open in new tab</button>
           <button class="ny-btn secondary" id="watch-countdown-btn" style="margin-top:0; padding:9px 14px;">Count in 3..2..1..Play</button>
         </div>
-        <div class="watch-note">Some sites refuse to load inside another page (that's the site's own security setting, not something this app can bypass) — if the screen stays blank, use "Open in new tab" instead and just watch together side by side, chatting live below to stay in sync.</div>
+        <div class="watch-note">YouTube and Vimeo links now play right here in the app. Some other sites deliberately block being loaded inside another page (that's the site's own security setting, not something this app can bypass) — if the screen stays blank for one of those, use "Open in new tab" instead and just watch together side by side, chatting live below to stay in sync.</div>
       </div>
 
       <div class="ny-card watch-chat-card">
@@ -1515,6 +1515,67 @@
     return YOUTUBE_API_KEY;
   }
 
+  // Spotify search — so typing a song name searches Spotify's real catalog directly
+  // (not just YouTube), using Spotify's own public Web API. This does NOT unlock full
+  // playback inside this app (see the Spotify section below for why) — it's just what
+  // lets search results come from Spotify. Setup (free, no credit card):
+  // 1. Go to https://developer.spotify.com/dashboard -> log in -> "Create app".
+  // 2. Any name/description is fine. Redirect URI can be anything, e.g. https://localhost — it's
+  //    not actually used for this kind of search.
+  // 3. Open the new app -> "Settings" -> copy "Client ID" and "Client secret".
+  // 4. Paste them into SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET below.
+  const SPOTIFY_CLIENT_ID = "PASTE_SPOTIFY_CLIENT_ID_HERE";
+  const SPOTIFY_CLIENT_SECRET = "PASTE_SPOTIFY_CLIENT_SECRET_HERE";
+  let spotifyAccessToken = null;
+  let spotifyTokenExpiresAt = 0;
+
+  function spotifyCredentialsConfigured(){
+    return SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_ID.indexOf('PASTE_') !== 0 &&
+           SPOTIFY_CLIENT_SECRET && SPOTIFY_CLIENT_SECRET.indexOf('PASTE_') !== 0;
+  }
+
+  async function getSpotifyAccessToken(){
+    if(spotifyAccessToken && Date.now() < spotifyTokenExpiresAt) return spotifyAccessToken;
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': 'Basic ' + btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`)
+      },
+      body: 'grant_type=client_credentials'
+    });
+    if(!res.ok) throw new Error('Spotify token request failed: ' + res.status);
+    const data = await res.json();
+    spotifyAccessToken = data.access_token;
+    spotifyTokenExpiresAt = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
+    return spotifyAccessToken;
+  }
+
+  async function spotifySearchTracks(query){
+    if(!spotifyCredentialsConfigured()) return null; // caller falls back to YouTube
+    try{
+      const token = await getSpotifyAccessToken();
+      const res = await fetch(`https://api.spotify.com/v1/search?type=track&limit=12&q=${encodeURIComponent(query)}`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if(!res.ok) throw new Error('Spotify search failed: ' + res.status);
+      const data = await res.json();
+      const items = (data.tracks && data.tracks.items) || [];
+      return items.map(t=>({
+        source: 'spotify',
+        spotifyUri: t.uri,
+        videoId: null,
+        title: t.name,
+        artist: (t.artists || []).map(a=>a.name).join(', '),
+        thumbnail: (t.album && t.album.images && (t.album.images[1] || t.album.images[0]) || {}).url || '',
+        duration: Math.round((t.duration_ms || 0) / 1000)
+      }));
+    }catch(e){
+      console.error('spotify search failed', e);
+      return null; // caller falls back to YouTube
+    }
+  }
+
   function musicDocRef(){ return db.collection('nyoyaDiaryMusic').doc('room'); }
   function playlistsRef(){ return db.collection('nyoyaDiaryPlaylists'); }
   let playlists = [];
@@ -1721,6 +1782,7 @@
       const banner = document.getElementById('music-unlock-banner');
       if(banner) banner.classList.remove('show');
       updateMediaSession();
+      updateSpotifyOpenAppBtn();
       return;
     }
     titleEl.textContent = currentTrack.title;
@@ -1736,6 +1798,27 @@
     playBtn.textContent = isPlaying ? '⏸' : '▶';
     updateUnlockBanner();
     updateMediaSession();
+    updateSpotifyOpenAppBtn();
+  }
+
+  // Spotify's embed widget can only ever play a 30s preview unless the visitor is
+  // signed into open.spotify.com with Premium in that exact browser tab — and on
+  // phones, Spotify's embed doesn't support full playback at all (that's a limit
+  // Spotify enforces on their side, not something this app's code controls). The
+  // one reliable way to get the FULL song on a Premium account is to hand off to
+  // the real Spotify app, so this button does that: tapping it opens the track's
+  // open.spotify.com link, which — if the Spotify app is installed — iOS/Android
+  // automatically hand off to the app itself for full, ad-free Premium playback.
+  function updateSpotifyOpenAppBtn(){
+    const btn = document.getElementById('spotify-open-app-btn');
+    if(!btn) return;
+    if(currentTrack && currentTrack.source === 'spotify' && currentTrack.spotifyUri){
+      const trackId = currentTrack.spotifyUri.replace('spotify:track:', '');
+      btn.href = `https://open.spotify.com/track/${trackId}`;
+      btn.style.display = 'block';
+    } else {
+      btn.style.display = 'none';
+    }
   }
 
   // Media Session API: this is what lets the lock screen / notification shade show
@@ -2036,12 +2119,22 @@
       if(results.length) lastMusicSearchError = null;
       return results;
     }
+    const linkInfo = parseYouTubeInput(query);
+    // Plain text (not a pasted link) — search Spotify's real catalog first, so picking
+    // a result plays through Spotify (with the "open full song in Spotify app" button).
+    // Falls back to YouTube automatically if Spotify isn't configured or finds nothing.
+    if(!linkInfo){
+      const spotifyResults = await spotifySearchTracks(query);
+      if(spotifyResults && spotifyResults.length){
+        lastMusicSearchError = null;
+        return spotifyResults;
+      }
+    }
     const effectiveKey = getYoutubeApiKey();
     if(!effectiveKey || effectiveKey.indexOf('PASTE_YOUTUBE_API_KEY_HERE') !== -1){
       alert('Add your YouTube Data API key in the code first — see the setup comment near YOUTUBE_API_KEY.');
       return [];
     }
-    const linkInfo = parseYouTubeInput(query);
     try{
       if(linkInfo && linkInfo.type === 'video'){
         const results = await fetchVideoById(linkInfo.id);
@@ -3493,12 +3586,43 @@
     try{ new URL(u); return u; }catch(e){ return ''; }
   }
 
+  // A plain "watch page" URL (youtube.com/watch?v=..., youtu.be/..., vimeo.com/...)
+  // is blocked from loading in an iframe by that site's own security headers — that's
+  // what was making YouTube links show a blank screen here. Each of these sites also
+  // publishes an official, different "/embed/" URL format that's specifically meant to
+  // be put in an iframe like this one. This converts the pasted link to that embeddable
+  // form so it actually plays inside the app instead of staying blank.
+  function toEmbeddableWatchUrl(url){
+    try{
+      const u = new URL(url);
+      const host = u.hostname.replace(/^www\./, '');
+      if(host === 'youtube.com' || host === 'm.youtube.com'){
+        const id = u.searchParams.get('v');
+        if(id) return `https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1`;
+        const shortsMatch = u.pathname.match(/^\/shorts\/([a-zA-Z0-9_-]+)/);
+        if(shortsMatch) return `https://www.youtube.com/embed/${shortsMatch[1]}?autoplay=1&playsinline=1`;
+        const embedMatch = u.pathname.match(/^\/embed\/([a-zA-Z0-9_-]+)/);
+        if(embedMatch) return url; // already an embed link
+      }
+      if(host === 'youtu.be'){
+        const id = u.pathname.replace(/^\//, '');
+        if(id) return `https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1`;
+      }
+      if(host === 'vimeo.com'){
+        const id = u.pathname.replace(/^\//, '').split('/')[0];
+        if(id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}?autoplay=1`;
+      }
+    }catch(e){ /* fall through and use the raw link as-is below */ }
+    return url;
+  }
+
   function renderWatchFrame(url){
     const iframe = document.getElementById('watch-iframe');
     const empty = document.getElementById('watch-empty');
     if(!iframe) return;
     if(url){
-      if(iframe.src !== url) iframe.src = url;
+      const embedUrl = toEmbeddableWatchUrl(url);
+      if(iframe.src !== embedUrl) iframe.src = embedUrl;
       iframe.style.display = 'block';
       if(empty) empty.style.display = 'none';
     } else {
