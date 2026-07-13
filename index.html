@@ -761,6 +761,7 @@
     overflow:hidden; margin-bottom:14px;
   }
   .watch-frame-wrap iframe{ width:100%; height:100%; border:0; display:block; }
+  .watch-frame-wrap video#watch-native-video{ object-fit:contain; }
   .watch-empty{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:rgba(255,255,255,0.5); font-size:13px; text-align:center; padding:20px;
@@ -777,18 +778,41 @@
     position:absolute; bottom:10px; left:10px; width:90px; height:auto; border-radius:8px;
     border:2px solid rgba(255,255,255,0.8); z-index:5; object-fit:cover;
   }
+  .watch-chat-toggle-btn{
+    display:none; position:absolute; bottom:10px; right:52px; z-index:7;
+    background:rgba(0,0,0,0.4); color:#fff; border:none; border-radius:50%;
+    width:34px; height:34px; font-size:15px; cursor:pointer; align-items:center; justify-content:center;
+  }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-toggle-btn{ display:flex; }
   /* When the frame wrapper itself is fullscreened (not just the iframe), everything
-     inside it — including the reparented chat card below — stays visible together. */
+     inside it — including the reparented chat card below — stays visible together.
+     Kept small, translucent, and borderless on purpose so it never blocks the video —
+     it's off by default and only appears when the person taps the chat toggle. */
   .watch-frame-wrap:fullscreen{ aspect-ratio:auto; width:100vw; height:100vh; border-radius:0; }
   .watch-frame-wrap:-webkit-full-screen{ width:100vw; height:100vh; border-radius:0; }
   .watch-frame-wrap.fullscreen-mode .watch-chat-card{
-    position:absolute; right:0; bottom:0; top:auto; width:280px; max-width:42%; height:46%;
-    margin:0; background:rgba(20,20,20,0.72); border-radius:14px 0 0 0; padding:10px;
-    z-index:6; color:#fff; backdrop-filter:blur(3px);
+    position:absolute; right:12px; bottom:56px; top:auto; width:250px; max-width:60%; height:34%;
+    max-height:300px; margin:0; background:transparent; border:none; border-radius:0; padding:0;
+    z-index:6; color:#fff; box-shadow:none;
+    display:none;
   }
-  .watch-frame-wrap.fullscreen-mode .watch-chat-card .ny-section-title{ color:#fff; font-size:12px; }
-  .watch-frame-wrap.fullscreen-mode .watch-chat-messages{ max-height:none; flex:1; }
-  .watch-frame-wrap.fullscreen-mode .comment-row, .watch-frame-wrap.fullscreen-mode .watch-chat-messages *{ color:#fff; }
+  .watch-frame-wrap.fullscreen-mode.chat-open .watch-chat-card{ display:flex; }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-card .ny-section-title{ display:none; }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-messages{
+    max-height:none; flex:1; background:transparent; padding:0 0 6px;
+  }
+  .watch-frame-wrap.fullscreen-mode .comment-row{
+    color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5);
+    background:none;
+  }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-messages *{ color:#fff; }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-input-row{
+    background:rgba(0,0,0,0.35); border-radius:20px; padding:4px 4px 4px 12px; border:none;
+  }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-input-row .ny-input{
+    background:transparent; border:none; color:#fff;
+  }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-input-row .ny-input::placeholder{ color:rgba(255,255,255,0.6); }
   .watch-chat-messages{
     max-height:260px; min-height:80px; overflow-y:auto; -webkit-overflow-scrolling:touch;
     display:flex; flex-direction:column; gap:8px; padding:2px 2px 8px;
@@ -1043,9 +1067,11 @@
         <div class="watch-frame-wrap" id="watch-frame-wrap">
           <div class="watch-empty" id="watch-empty">Paste a link below, or share your screen — YouTube, a movie site, anything.</div>
           <iframe id="watch-iframe" style="display:none;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+          <video id="watch-native-video" controls playsinline style="display:none; width:100%; height:100%; background:#000;"></video>
           <video id="screenshare-remote-video" autoplay playsinline style="display:none; width:100%; height:100%; object-fit:contain; background:#000;"></video>
           <video id="screenshare-local-preview" autoplay playsinline muted style="display:none;"></video>
           <button class="watch-fullscreen-btn" id="watch-fullscreen-btn" title="Fullscreen">⛶</button>
+          <button class="watch-chat-toggle-btn" id="watch-chat-toggle-btn" title="Show/hide live chat">💬</button>
         </div>
         <div class="watch-controls-row">
           <input class="ny-input" id="watch-url-input" placeholder="Paste any video/movie link here..." style="margin:0;" />
@@ -1626,6 +1652,7 @@
   let lastLoadedVideoId = null;
   let roomData = null;
   let lastMusicSearchError = null;
+  let lastResolveError = null;
   let serverTimeOffset = 0;
 
   // Every device's clock is slightly different, which used to cause the "position" math
@@ -1731,20 +1758,33 @@
     if(track.source !== 'spotify' || track.videoId) return track;
     try{
       const query = `${track.title} ${track.artist}`;
-      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=relevance&maxResults=1&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=relevance&maxResults=1&q=${encodeURIComponent(query)}&key=${getYoutubeApiKey()}`;
       const res = await fetch(searchUrl);
       const data = await res.json();
+      if(data.error){
+        console.error('resolve-to-youtube search error', data.error);
+        const reason = (data.error.errors && data.error.errors[0] && data.error.errors[0].reason) || data.error.status || '';
+        lastResolveError = reason === 'quotaExceeded'
+          ? 'YouTube search quota for today is used up — songs found via Spotify search can\'t be resolved to playable audio until it resets tomorrow.'
+          : (data.error.message || 'Could not reach YouTube to find a playable version of this song.');
+        return track;
+      }
       const item = data.items && data.items[0];
-      if(!item) return track;
+      if(!item){ lastResolveError = 'Could not find a matching YouTube video for this song.'; return track; }
       const videoId = item.id.videoId;
       let duration = track.duration || 0;
       try{
-        const durRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoId}&key=${YOUTUBE_API_KEY}`);
+        const durRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoId}&key=${getYoutubeApiKey()}`);
         const durData = await durRes.json();
         if(durData.items && durData.items[0]) duration = parseISODuration(durData.items[0].contentDetails.duration);
       }catch(e){ /* keep original duration estimate */ }
+      lastResolveError = null;
       return { ...track, videoId, source: 'youtube', duration, spotifyUri: null };
-    }catch(e){ console.error('resolve spotify track to youtube failed', e); return track; }
+    }catch(e){
+      console.error('resolve spotify track to youtube failed', e);
+      lastResolveError = 'Network error while looking up playable audio for this song.';
+      return track;
+    }
   }
 
   async function playTrackNow(track, extra){
@@ -1763,6 +1803,10 @@
       }catch(e){ console.error('direct play kick failed', e); }
     }
     const resolved = await resolvePlayableTrack(track);
+    if(!resolved.videoId){
+      alert(lastResolveError || 'Couldn\'t find a playable version of this song — try a different search, or paste a direct YouTube link instead.');
+      return;
+    }
     try{
       await musicDocRef().set({
         videoId: resolved.videoId || null, title: resolved.title, artist: resolved.artist,
@@ -3789,43 +3833,63 @@
       const host = u.hostname.replace(/^www\./, '');
       if(host === 'youtube.com' || host === 'm.youtube.com'){
         const id = u.searchParams.get('v');
-        if(id) return `https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1`;
+        if(id) return { kind:'iframe', src:`https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1` };
         const shortsMatch = u.pathname.match(/^\/shorts\/([a-zA-Z0-9_-]+)/);
-        if(shortsMatch) return `https://www.youtube.com/embed/${shortsMatch[1]}?autoplay=1&playsinline=1`;
+        if(shortsMatch) return { kind:'iframe', src:`https://www.youtube.com/embed/${shortsMatch[1]}?autoplay=1&playsinline=1` };
         const embedMatch = u.pathname.match(/^\/embed\/([a-zA-Z0-9_-]+)/);
-        if(embedMatch) return url; // already an embed link
+        if(embedMatch) return { kind:'iframe', src:url }; // already an embed link
       }
       if(host === 'youtu.be'){
         const id = u.pathname.replace(/^\//, '');
-        if(id) return `https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1`;
+        if(id) return { kind:'iframe', src:`https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1` };
       }
       if(host === 'vimeo.com'){
         const id = u.pathname.replace(/^\//, '').split('/')[0];
-        if(id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}?autoplay=1`;
+        if(id && /^\d+$/.test(id)) return { kind:'iframe', src:`https://player.vimeo.com/video/${id}?autoplay=1` };
       }
       if(host === 'drive.google.com'){
         const fileMatch = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
         const fileId = fileMatch ? fileMatch[1] : u.searchParams.get('id');
-        if(fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+        // Drive's own "/preview" iframe has native controls we can't touch at all (cross-origin) —
+        // that's what was putting the seek bar/play button in an odd spot above the video.
+        // A direct-download-style URL streams the raw file instead, so it plays in OUR OWN
+        // <video> element with normal, YouTube-style controls (frame on top, seek bar + play/pause
+        // built into the bottom of the frame) that we fully control.
+        if(fileId) return { kind:'native', src:`https://drive.google.com/uc?export=download&id=${fileId}` };
       }
     }catch(e){ /* fall through and use the raw link as-is below */ }
-    return url;
+    return { kind:'iframe', src:url };
   }
 
   function renderWatchFrame(url){
     const iframe = document.getElementById('watch-iframe');
+    const nativeVideo = document.getElementById('watch-native-video');
     const empty = document.getElementById('watch-empty');
     const ssVideo = document.getElementById('screenshare-remote-video');
-    if(!iframe) return;
+    if(!iframe || !nativeVideo) return;
     if(url){
-      const embedUrl = toEmbeddableWatchUrl(url);
-      if(iframe.src !== embedUrl) iframe.src = embedUrl;
-      iframe.style.display = 'block';
+      const embed = toEmbeddableWatchUrl(url);
+      if(embed.kind === 'native'){
+        if(nativeVideo.src !== embed.src){ nativeVideo.src = embed.src; nativeVideo.load(); }
+        nativeVideo.style.display = 'block';
+        nativeVideo.play().catch(()=>{ /* needs a tap — browser autoplay policy, not a bug */ });
+        iframe.removeAttribute('src');
+        iframe.style.display = 'none';
+      } else {
+        if(iframe.src !== embed.src) iframe.src = embed.src;
+        iframe.style.display = 'block';
+        nativeVideo.pause();
+        nativeVideo.removeAttribute('src');
+        nativeVideo.style.display = 'none';
+      }
       if(empty) empty.style.display = 'none';
       if(ssVideo) ssVideo.style.display = 'none';
     } else {
       iframe.removeAttribute('src');
       iframe.style.display = 'none';
+      nativeVideo.pause();
+      nativeVideo.removeAttribute('src');
+      nativeVideo.style.display = 'none';
       if(empty && !(ssVideo && ssVideo.style.display === 'block')) empty.style.display = 'flex';
     }
   }
@@ -3913,11 +3977,17 @@
   function bindWatchFullscreen(){
     const wrap = document.getElementById('watch-frame-wrap');
     const btn = document.getElementById('watch-fullscreen-btn');
+    const chatToggleBtn = document.getElementById('watch-chat-toggle-btn');
     if(!wrap || !btn) return;
     btn.addEventListener('click', ()=>{
       const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
       if(req) req.call(wrap);
     });
+    if(chatToggleBtn){
+      chatToggleBtn.addEventListener('click', ()=>{
+        wrap.classList.toggle('chat-open');
+      });
+    }
     function onFullscreenChange(){
       const isFs = document.fullscreenElement === wrap || document.webkitFullscreenElement === wrap;
       const chatCard = document.getElementById('watch-chat-card');
@@ -3927,8 +3997,10 @@
         watchChatOriginalNextSibling = chatCard.nextSibling;
         wrap.appendChild(chatCard);
         wrap.classList.add('fullscreen-mode');
+        wrap.classList.remove('chat-open'); // start hidden so the video isn't covered
       } else {
         wrap.classList.remove('fullscreen-mode');
+        wrap.classList.remove('chat-open');
         if(watchChatOriginalParent){
           watchChatOriginalParent.insertBefore(chatCard, watchChatOriginalNextSibling);
         }
