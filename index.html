@@ -473,25 +473,34 @@
     background:var(--white);
     border-top:1px solid var(--line);
     display:flex;
-    padding:8px 4px calc(8px + env(safe-area-inset-bottom));
+    padding:6px 2px calc(6px + env(safe-area-inset-bottom));
     max-width:460px;
     margin:0 auto;
-    overflow-x:auto;
   }
   .nav-btn{
-    flex:1 0 auto;
-    min-width:54px;
+    flex:1 1 0;
+    min-width:0;
     background:none; border:none;
-    display:flex; flex-direction:column; align-items:center; gap:3px;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
     color:var(--ink-soft);
     cursor:pointer;
-    padding:6px 1px;
+    padding:5px 0;
     font-family:var(--font-body);
-    font-size:9.5px;
+    font-size:8.5px;
     font-weight:700;
+    white-space:nowrap;
+    overflow:hidden;
   }
-  .nav-btn svg{width:19px;height:19px;}
+  .nav-btn svg{width:17px;height:17px; flex-shrink:0;}
   .nav-btn.active{color:var(--berry);}
+  .nav-btn{ position:relative; }
+  .nav-badge{
+    position:absolute; top:1px; right:10%;
+    background:var(--berry); color:#fff;
+    font-size:9px; font-weight:800; min-width:14px; height:14px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center; padding:0 3px; line-height:1;
+    box-shadow:0 0 0 2px var(--white);
+  }
 
   .modal-backdrop{
     position:fixed; inset:0; background:var(--modal-overlay);
@@ -556,7 +565,7 @@
                       radial-gradient(circle at 80% 85%, rgba(201,160,92,0.05), transparent 45%);
   }
   .chat-bubble{
-    width:fit-content; max-width:74%; padding:6px 10px; border-radius:16px; font-size:14px; line-height:1.35;
+    width:max-content; max-width:70%; padding:6px 9px; border-radius:16px; font-size:14px; line-height:1.35;
     white-space:pre-wrap; word-wrap:break-word; margin-top:2px; position:relative;
     box-shadow:0 1px 1px rgba(0,0,0,0.04);
   }
@@ -566,8 +575,8 @@
   .chat-bubble-name{ font-size:11px; font-weight:700; color:var(--berry-deep); margin-bottom:2px; }
   .chat-bubble.me .chat-bubble-name, .chat-bubble.me .chat-bubble-name-row{ display:none; }
   .chat-meta{
-    float:right; margin:3px 0 -3px 8px; font-size:10px; opacity:0.7;
-    white-space:nowrap; display:inline-flex; align-items:center; gap:2px;
+    display:inline-block; margin-left:6px; font-size:10px; opacity:0.7;
+    white-space:nowrap; vertical-align:bottom;
   }
   .chat-bubble.me .chat-meta{ color:rgba(255,255,255,0.8); }
   .chat-bubble.them .chat-meta{ color:var(--ink-soft); }
@@ -987,8 +996,6 @@
           <button class="music-ctrl-btn music-toggle-btn" id="music-repeat-btn" title="Repeat playlist">🔁</button>
         </div>
         <div class="music-listeners" id="music-listeners"></div>
-        <div id="spotify-embed-holder"></div>
-        <a id="spotify-open-app-btn" class="ny-btn secondary" style="display:none; margin-top:10px; text-align:center; text-decoration:none;" href="#" target="_blank" rel="noopener">🎧 Buka lagu penuh di Spotify</a>
       </div>
 
       <div class="ny-card">
@@ -1025,7 +1032,7 @@
           <button class="ny-btn secondary" id="watch-open-tab-btn" style="margin-top:0; padding:9px 14px;">Open in new tab</button>
           <button class="ny-btn secondary" id="watch-countdown-btn" style="margin-top:0; padding:9px 14px;">Count in 3..2..1..Play</button>
         </div>
-        <div class="watch-note">YouTube and Vimeo links now play right here in the app. Some other sites deliberately block being loaded inside another page (that's the site's own security setting, not something this app can bypass) — if the screen stays blank for one of those, use "Open in new tab" instead and just watch together side by side, chatting live below to stay in sync.</div>
+        <div class="watch-note">YouTube, Vimeo, and Google Drive video links (shared as "anyone with the link") now play right here in the app. Some other sites deliberately block being loaded inside another page (that's the site's own security setting, not something this app can bypass) — if the screen stays blank for one of those, use "Open in new tab" instead and just watch together side by side, chatting live below to stay in sync.</div>
       </div>
 
       <div class="ny-card watch-chat-card">
@@ -1411,6 +1418,7 @@
       memoryBox.forEach(m=>{
         if(!prevMemoryIds.has(m.id) && m.author && m.author !== currentUser){
           notify('New memory from ' + m.author, m.title || 'New memory added');
+          bumpUnread('box');
         }
       });
       prevMemoryIds = new Set(memoryBox.map(m=>m.id));
@@ -1687,13 +1695,38 @@
     }catch(e){ console.error('update music state failed', e); }
   }
 
+  // Spotify search results have no playable audio we can embed reliably (Spotify's embed
+  // only ever gives a 30s preview on phones, Premium or not — confusing and not full songs).
+  // So right before anything actually plays, resolve it to a matching YouTube video, which
+  // reliably plays the full track. Spotify is still used for nicer search metadata only.
+  async function resolvePlayableTrack(track){
+    if(track.source !== 'spotify' || track.videoId) return track;
+    try{
+      const query = `${track.title} ${track.artist}`;
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=relevance&maxResults=1&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+      const res = await fetch(searchUrl);
+      const data = await res.json();
+      const item = data.items && data.items[0];
+      if(!item) return track;
+      const videoId = item.id.videoId;
+      let duration = track.duration || 0;
+      try{
+        const durRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoId}&key=${YOUTUBE_API_KEY}`);
+        const durData = await durRes.json();
+        if(durData.items && durData.items[0]) duration = parseISODuration(durData.items[0].contentDetails.duration);
+      }catch(e){ /* keep original duration estimate */ }
+      return { ...track, videoId, source: 'youtube', duration, spotifyUri: null };
+    }catch(e){ console.error('resolve spotify track to youtube failed', e); return track; }
+  }
+
   async function playTrackNow(track, extra){
     if(!firebaseReady) return;
+    const resolved = await resolvePlayableTrack(track);
     try{
       await musicDocRef().set({
-        videoId: track.videoId || null, title: track.title, artist: track.artist,
-        thumbnail: track.thumbnail, duration: track.duration || 0,
-        source: track.source || 'youtube', spotifyUri: track.spotifyUri || null,
+        videoId: resolved.videoId || null, title: resolved.title, artist: resolved.artist,
+        thumbnail: resolved.thumbnail, duration: resolved.duration || 0,
+        source: 'youtube', spotifyUri: null,
         position: 0, isPlaying: true,
         updatedAt: nowMs(), updatedBy: currentUser || 'Someone',
         queue: firebase.firestore.FieldValue.arrayRemove(track),
@@ -1726,16 +1759,7 @@
       const shuffle = !!(roomData && roomData.shuffle);
       const ordered = shuffle ? shuffleArray(playlistTracks) : playlistTracks;
       const [first, ...rest] = ordered;
-      try{
-        await musicDocRef().set({
-          videoId: first.videoId || null, title: first.title, artist: first.artist,
-          thumbnail: first.thumbnail, duration: first.duration || 0,
-          source: first.source || 'youtube', spotifyUri: first.spotifyUri || null,
-          position: 0, isPlaying: true,
-          updatedAt: nowMs(), updatedBy: currentUser || 'Someone',
-          queue: rest
-        }, { merge: true });
-      }catch(e){ console.error('repeat playlist failed', e); }
+      await playTrackNow(first, { queue: rest });
       return;
     }
     await updateMusicState({ isPlaying: false });
@@ -1890,11 +1914,6 @@
   }
 
   function applyPlayerSync(data){
-    if(data.source === 'spotify'){
-      if(!data.spotifyUri) return;
-      applySpotifySync(data);
-      return;
-    }
     if(!ytReady || !ytPlayer || !data.videoId) return;
     if(lastLoadedVideoId !== data.videoId){
       lastLoadedVideoId = data.videoId;
@@ -2437,7 +2456,65 @@
   // Android (Chrome keeps delivering them even on another tab or app). They will NOT wake up
   // a fully closed app or a locked phone on either platform; true "wake the phone" push needs
   // a small server component (Firebase Cloud Functions + FCM), which is a bigger, optional step.
+  // A user gesture (tap/click) anywhere unlocks audio, satisfying mobile browsers'
+  // autoplay rules so the chime below can actually play once something happens later.
+  let anyInteractionUnlocked = false;
+  document.addEventListener('pointerdown', function unlockOnce(){
+    anyInteractionUnlocked = true;
+  }, { once: true });
+
+  let chimeCtx = null;
+  function playChime(){
+    if(document.hidden || !anyInteractionUnlocked) return;
+    try{
+      if(!chimeCtx) chimeCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = chimeCtx;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(880, ctx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.1);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      o.connect(g); g.connect(ctx.destination);
+      o.start();
+      o.stop(ctx.currentTime + 0.4);
+    }catch(e){ console.error('chime failed', e); }
+  }
+
+  // ---------- Unread badges on the bottom nav ----------
+  let tabUnread = { home: 0, chat: 0, box: 0 };
+  function renderNavBadges(){
+    document.querySelectorAll('.nav-btn').forEach(btn=>{
+      const tab = btn.dataset.tab;
+      let badge = btn.querySelector('.nav-badge');
+      const count = tabUnread[tab] || 0;
+      if(count > 0){
+        if(!badge){
+          badge = document.createElement('span');
+          badge.className = 'nav-badge';
+          btn.appendChild(badge);
+        }
+        badge.textContent = count > 9 ? '9+' : String(count);
+      } else if(badge){
+        badge.remove();
+      }
+    });
+  }
+  function bumpUnread(tab){
+    if(!(tab in tabUnread)) return;
+    const activeBtn = document.querySelector('.nav-btn.active');
+    if(activeBtn && activeBtn.dataset.tab === tab && document.visibilityState === 'visible') return;
+    tabUnread[tab] = (tabUnread[tab] || 0) + 1;
+    renderNavBadges();
+  }
+  function clearUnread(tab){
+    if(tabUnread[tab]){ tabUnread[tab] = 0; renderNavBadges(); }
+  }
+
   function notify(title, body){
+    playChime();
     if(!('Notification' in window)) return;
     if(Notification.permission !== 'granted') return;
     try{ new Notification(title, { body: body || '' }); }catch(e){ console.error('notify failed', e); }
@@ -2523,7 +2600,67 @@
     "When you're tired, remember: you're not going through this alone.",
     "You're allowed to be a work in progress, you don't have to be great right away.",
     "Thank you for being you, that's already more than enough.",
-    "I hope luck and happiness keep coming your way, slowly but surely."
+    "I hope luck and happiness keep coming your way, slowly but surely.",
+    "You make ordinary days feel like something worth remembering.",
+    "Take your time today — there's no prize for rushing through it.",
+    "I like you best when you're laughing at your own jokes.",
+    "You're allowed to take up space, ask for help, and rest without guilt.",
+    "Some days you just survive them, and that still counts as winning.",
+    "I still get a little happy every time I see your name pop up.",
+    "You don't have to carry everything alone — hand some of it to me.",
+    "Whatever you're proud of today, however small, I'm proud of it too.",
+    "You're doing better than you think you are.",
+    "It's okay to move slowly today. Slow still counts as forward.",
+    "You are not behind. You are exactly where you need to be.",
+    "I hope something small makes you smile today, unexpectedly.",
+    "Even on your quietest days, you're still someone worth knowing.",
+    "You've survived every hard day so far. That's a pretty good track record.",
+    "Take the nap. Answer the message later. You're allowed.",
+    "I don't need you to have it all figured out — just be here.",
+    "Your feelings are valid even on days you can't explain them.",
+    "You bring a kind of calm into my life I didn't know I needed.",
+    "However today goes, I still choose you at the end of it.",
+    "You don't need permission to rest. Consider this it.",
+    "I love the way you try, even when trying is the hardest part.",
+    "One good thing about today: you're still here, still going.",
+    "You're someone's favorite text to open. You're mine.",
+    "It's okay to not be okay today — just don't carry it alone.",
+    "Small steps are still steps. Be gentle with your pace.",
+    "You have survived 100% of your bad days so far. Not bad.",
+    "I hope today gives you a reason to breathe a little easier.",
+    "Whatever mess today is, you're allowed to clean it up tomorrow.",
+    "You're not a burden for needing rest, comfort, or company.",
+    "I keep choosing you, on good days and the messy ones too.",
+    "You don't have to earn love by being productive today.",
+    "Your softness is not a weakness — it's one of your best parts.",
+    "You're allowed to change your mind, your pace, your plans.",
+    "Even your quiet, uneventful days matter to me.",
+    "I hope you feel half as loved as you actually are.",
+    "You are worth the extra effort, always.",
+    "Some days all you need to do is just keep breathing — that's enough.",
+    "You handled today, and that's no small thing.",
+    "I hope the weight on your shoulders feels lighter by tonight.",
+    "You are allowed to protect your peace today.",
+    "Whatever today asked of you, I hope you were gentle with yourself too.",
+    "You are someone worth waiting for, worth choosing, worth loving well.",
+    "I hope today reminds you how far you've already come.",
+    "You don't need a good reason to treat yourself kindly today.",
+    "Even the ordinary version of you is someone I love.",
+    "It's fine to do the bare minimum today — that still counts.",
+    "You are allowed to outgrow what no longer fits you, including bad days.",
+    "I hope your coffee is warm and your day is kind to you.",
+    "You are not too much. You are exactly enough.",
+    "I hope today lets you exhale a little.",
+    "You're the softest place I know to land after a hard day.",
+    "Whatever you didn't get done today, tomorrow is still yours.",
+    "You are loved on your loud days and your silent ones.",
+    "I hope something today makes you feel a little lighter.",
+    "You don't have to perform happiness — just be honestly you.",
+    "You are worth checking in on, even when you say you're fine.",
+    "Today doesn't have to be your best day to still be a good one.",
+    "I hope you know how much steadier I feel with you around.",
+    "You're allowed to need reminding that you're doing okay.",
+    "Whatever today looked like, I'm glad I get to hear about it from you."
   ];
   let quoteIdx = 0;
   function dayOfYear(){
@@ -2658,8 +2795,10 @@
             if(p.kind === 'mood'){
               const moodDef = MOODS.find(m=>m.key===p.mood);
               notify('New mood update from ' + p.author, (moodDef ? moodDef.label + ' — ' : '') + (p.text || ''));
+              bumpUnread('home');
             } else {
               notify('New post from ' + p.author, p.text || (p.photo ? '📷 Photo' : ''));
+              bumpUnread('home');
             }
           }
         });
@@ -2833,12 +2972,11 @@
         const read = otherReadTs && m.ts && otherReadTs >= m.ts;
         tick = `<span class="chat-read-tick ${read ? 'read' : ''}">${read ? '✓✓' : '✓'}</span>`;
       }
-      html += `<div class="chat-bubble ${mine ? 'me' : 'them'} ${groupStart ? 'group-start' : ''}">
-        ${groupStart ? `<div class="chat-bubble-name-row"><span class="bubble-avatar">${avatarInner(m.author)}</span><span class="chat-bubble-name">${escapeHtml(m.author || '')}</span></div>` : ''}
-        ${m.photo ? `<img class="chat-photo-img" src="${m.photo.dataUrl}" />` : ''}
-        ${m.text ? escapeHtml(m.text) : ''}
-        <span class="chat-meta">${time} ${tick}</span>
-      </div>`;
+      const nameRow = groupStart ? `<div class="chat-bubble-name-row"><span class="bubble-avatar">${avatarInner(m.author)}</span><span class="chat-bubble-name">${escapeHtml(m.author || '')}</span></div>` : '';
+      const photoHtml = m.photo ? `<img class="chat-photo-img" src="${m.photo.dataUrl}" />` : '';
+      const textHtml = m.text ? escapeHtml(m.text) : '';
+      const metaHtml = `<span class="chat-meta">${time} ${tick}</span>`;
+      html += `<div class="chat-bubble ${mine ? 'me' : 'them'} ${groupStart ? 'group-start' : ''}">${nameRow}${photoHtml}${textHtml}${metaHtml}</div>`;
       lastAuthor = m.author;
     });
     el.innerHTML = html;
@@ -2911,6 +3049,7 @@
         msgs.forEach(m=>{
           if(!prevChatIds.has(m.id) && m.author && m.author !== currentUser){
             notify('New message from ' + m.author, m.text || (m.photo ? '📷 Photo' : ''));
+            bumpUnread('chat');
           }
         });
         prevChatIds = new Set(msgs.map(m=>m.id));
@@ -3612,6 +3751,11 @@
         const id = u.pathname.replace(/^\//, '').split('/')[0];
         if(id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}?autoplay=1`;
       }
+      if(host === 'drive.google.com'){
+        const fileMatch = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        const fileId = fileMatch ? fileMatch[1] : u.searchParams.get('id');
+        if(fileId) return `https://drive.google.com/file/d/${fileId}/preview`;
+      }
     }catch(e){ /* fall through and use the raw link as-is below */ }
     return url;
   }
@@ -3770,6 +3914,7 @@
         btn.classList.add('active');
         document.querySelectorAll('.ny-tab').forEach(t=>t.classList.remove('active'));
         document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+        clearUnread(btn.dataset.tab);
         if(btn.dataset.tab === 'chat'){
           markChatRead();
           requestAnimationFrame(()=>{
