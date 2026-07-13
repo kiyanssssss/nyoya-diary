@@ -767,8 +767,28 @@
   }
   .watch-controls-row{ display:flex; gap:8px; }
   .watch-controls-row .ny-input{ margin:0; flex:1; }
-  .watch-note{ font-size:11.5px; color:var(--ink-soft); margin-top:10px; line-height:1.5; }
   .watch-chat-card{ display:flex; flex-direction:column; }
+  .watch-fullscreen-btn{
+    position:absolute; bottom:10px; right:10px; z-index:5;
+    background:rgba(0,0,0,0.55); color:#fff; border:none; border-radius:8px;
+    width:34px; height:34px; font-size:16px; cursor:pointer;
+  }
+  #screenshare-local-preview{
+    position:absolute; bottom:10px; left:10px; width:90px; height:auto; border-radius:8px;
+    border:2px solid rgba(255,255,255,0.8); z-index:5; object-fit:cover;
+  }
+  /* When the frame wrapper itself is fullscreened (not just the iframe), everything
+     inside it — including the reparented chat card below — stays visible together. */
+  .watch-frame-wrap:fullscreen{ aspect-ratio:auto; width:100vw; height:100vh; border-radius:0; }
+  .watch-frame-wrap:-webkit-full-screen{ width:100vw; height:100vh; border-radius:0; }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-card{
+    position:absolute; right:0; bottom:0; top:auto; width:280px; max-width:42%; height:46%;
+    margin:0; background:rgba(20,20,20,0.72); border-radius:14px 0 0 0; padding:10px;
+    z-index:6; color:#fff; backdrop-filter:blur(3px);
+  }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-card .ny-section-title{ color:#fff; font-size:12px; }
+  .watch-frame-wrap.fullscreen-mode .watch-chat-messages{ max-height:none; flex:1; }
+  .watch-frame-wrap.fullscreen-mode .comment-row, .watch-frame-wrap.fullscreen-mode .watch-chat-messages *{ color:#fff; }
   .watch-chat-messages{
     max-height:260px; min-height:80px; overflow-y:auto; -webkit-overflow-scrolling:touch;
     display:flex; flex-direction:column; gap:8px; padding:2px 2px 8px;
@@ -827,7 +847,7 @@
 </style>
 </head>
 <body>
-<div id="youtube-player-container" style="position:fixed; bottom:0; left:0; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; z-index:-1;"></div>
+<div id="youtube-player-container" style="position:absolute; top:-9999px; left:-9999px; width:320px; height:180px;"></div>
 <div id="ny-app">
   <div id="conn-banner" class="conn-banner" style="display:none;"></div>
   <div class="ny-header">
@@ -1021,8 +1041,11 @@
     <div class="ny-tab" id="tab-watch">
       <div class="ny-card" style="padding:10px;">
         <div class="watch-frame-wrap" id="watch-frame-wrap">
-          <div class="watch-empty" id="watch-empty">Paste any link below — YouTube, a movie site, anything — and tap "Set for both" to load it here for both of you.</div>
-          <iframe id="watch-iframe" style="display:none;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-popups-to-escape-sandbox"></iframe>
+          <div class="watch-empty" id="watch-empty">Paste a link below, or share your screen — YouTube, a movie site, anything.</div>
+          <iframe id="watch-iframe" style="display:none;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+          <video id="screenshare-remote-video" autoplay playsinline style="display:none; width:100%; height:100%; object-fit:contain; background:#000;"></video>
+          <video id="screenshare-local-preview" autoplay playsinline muted style="display:none;"></video>
+          <button class="watch-fullscreen-btn" id="watch-fullscreen-btn" title="Fullscreen">⛶</button>
         </div>
         <div class="watch-controls-row">
           <input class="ny-input" id="watch-url-input" placeholder="Paste any video/movie link here..." style="margin:0;" />
@@ -1030,12 +1053,17 @@
         </div>
         <div class="watch-controls-row" style="margin-top:8px;">
           <button class="ny-btn secondary" id="watch-open-tab-btn" style="margin-top:0; padding:9px 14px;">Open in new tab</button>
-          <button class="ny-btn secondary" id="watch-countdown-btn" style="margin-top:0; padding:9px 14px;">Count in 3..2..1..Play</button>
+          <button class="ny-btn secondary" id="watch-countdown-btn" style="margin-top:0; padding:9px 14px;">Re-sync (3..2..1..Play)</button>
         </div>
-        <div class="watch-note">YouTube, Vimeo, and Google Drive video links (shared as "anyone with the link") now play right here in the app. Some other sites deliberately block being loaded inside another page (that's the site's own security setting, not something this app can bypass) — if the screen stays blank for one of those, use "Open in new tab" instead and just watch together side by side, chatting live below to stay in sync.</div>
+        <div class="watch-controls-row" style="margin-top:8px;">
+          <button class="ny-btn secondary" id="screenshare-start-btn" style="margin-top:0; padding:9px 14px;">🖥️ Share my screen</button>
+          <button class="ny-btn secondary" id="screenshare-stop-btn" style="margin-top:0; padding:9px 14px; display:none;">Stop sharing</button>
+        </div>
+        <div id="screenshare-status" style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;"></div>
+        <div style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Screen sharing works on desktop browsers (Chrome/Edge/Firefox on a computer) — phones don't support screen capture.</div>
       </div>
 
-      <div class="ny-card watch-chat-card">
+      <div class="ny-card watch-chat-card" id="watch-chat-card">
         <div class="ny-section-title" style="margin-top:0;">Live chat</div>
         <div id="watch-chat-messages" class="watch-chat-messages"><div class="loading-msg">No comments yet — say something while you watch.</div></div>
         <div class="watch-chat-input-row">
@@ -1668,7 +1696,7 @@
     if(!firebaseReady) return;
     await loadYouTubeAPI();
     ytPlayer = new YT.Player('youtube-player-container', {
-      height: '1', width: '1',
+      height: '180', width: '320',
       playerVars: { autoplay: 0, controls: 0, disablekb: 1, modestbranding: 1, playsinline: 1 },
       events: {
         onReady: ()=>{ ytReady = true; if(roomData) applyPlayerSync(roomData); },
@@ -1721,6 +1749,19 @@
 
   async function playTrackNow(track, extra){
     if(!firebaseReady) return;
+    // If this is already a directly playable YouTube video (the common case), kick the
+    // player immediately — synchronously with whatever click triggered this — so the
+    // browser counts it as a real user gesture instead of silently blocking the audio.
+    // Spotify-sourced tracks still need an async lookup first (see below) and so may
+    // occasionally need one tap on the "tap to enable audio" banner as a fallback.
+    if(track.videoId && ytPlayer && ytReady){
+      try{
+        suppressSync = true;
+        lastLoadedVideoId = track.videoId;
+        ytPlayer.loadVideoById(track.videoId);
+        setTimeout(()=>{ suppressSync = false; }, 800);
+      }catch(e){ console.error('direct play kick failed', e); }
+    }
     const resolved = await resolvePlayableTrack(track);
     try{
       await musicDocRef().set({
@@ -2411,6 +2452,17 @@
     }
     const playing = !isPlaying;
     const pos = (ytPlayer && ytReady) ? ytPlayer.getCurrentTime() : ((roomData && roomData.position) || 0);
+    // Call play/pause directly here, synchronously with the click — waiting for the
+    // Firestore round-trip to do this (like before) made many mobile browsers silently
+    // block the audio, since by the time the snapshot came back it was no longer
+    // considered a direct user gesture.
+    if(ytPlayer && ytReady){
+      try{
+        suppressSync = true;
+        if(playing) ytPlayer.playVideo(); else ytPlayer.pauseVideo();
+        setTimeout(()=>{ suppressSync = false; }, 400);
+      }catch(e){ console.error('direct toggle play failed', e); }
+    }
     await updateMusicState({ isPlaying: playing, position: pos });
   }
 
@@ -3763,16 +3815,18 @@
   function renderWatchFrame(url){
     const iframe = document.getElementById('watch-iframe');
     const empty = document.getElementById('watch-empty');
+    const ssVideo = document.getElementById('screenshare-remote-video');
     if(!iframe) return;
     if(url){
       const embedUrl = toEmbeddableWatchUrl(url);
       if(iframe.src !== embedUrl) iframe.src = embedUrl;
       iframe.style.display = 'block';
       if(empty) empty.style.display = 'none';
+      if(ssVideo) ssVideo.style.display = 'none';
     } else {
       iframe.removeAttribute('src');
       iframe.style.display = 'none';
-      if(empty) empty.style.display = 'flex';
+      if(empty && !(ssVideo && ssVideo.style.display === 'block')) empty.style.display = 'flex';
     }
   }
 
@@ -3796,7 +3850,7 @@
   async function setWatchUrl(url){
     if(!firebaseReady) return;
     try{
-      await watchDocRef().set({ url, updatedBy: currentUser || 'Someone', updatedAt: Date.now() }, { merge: true });
+      await watchDocRef().set({ url, countdownTs: Date.now(), updatedBy: currentUser || 'Someone', updatedAt: Date.now() }, { merge: true });
       logActivity('watch', { text: 'Set a link to watch together' });
     }catch(e){ console.error('set watch url failed', e); alert('Could not set that link — check the console.'); }
   }
@@ -3844,7 +3898,234 @@
         catch(e){ console.error('countdown sync failed', e); }
       }
     });
+    bindWatchFullscreen();
+    bindScreenShare();
     bindWatchChat();
+  }
+
+  // Lets you keep reading/writing the live chat even while the video is fullscreen.
+  // Cross-origin embeds (YouTube/Drive/etc.) only allow THEMSELVES to be fullscreened —
+  // nothing from the parent page can float on top of that. The fix: fullscreen OUR OWN
+  // wrapper div instead of the iframe, then temporarily move the chat card to live inside
+  // that same wrapper, so it fullscreens along with the video instead of disappearing.
+  let watchChatOriginalNextSibling = null;
+  let watchChatOriginalParent = null;
+  function bindWatchFullscreen(){
+    const wrap = document.getElementById('watch-frame-wrap');
+    const btn = document.getElementById('watch-fullscreen-btn');
+    if(!wrap || !btn) return;
+    btn.addEventListener('click', ()=>{
+      const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+      if(req) req.call(wrap);
+    });
+    function onFullscreenChange(){
+      const isFs = document.fullscreenElement === wrap || document.webkitFullscreenElement === wrap;
+      const chatCard = document.getElementById('watch-chat-card');
+      if(!chatCard) return;
+      if(isFs){
+        watchChatOriginalParent = chatCard.parentNode;
+        watchChatOriginalNextSibling = chatCard.nextSibling;
+        wrap.appendChild(chatCard);
+        wrap.classList.add('fullscreen-mode');
+      } else {
+        wrap.classList.remove('fullscreen-mode');
+        if(watchChatOriginalParent){
+          watchChatOriginalParent.insertBefore(chatCard, watchChatOriginalNextSibling);
+        }
+      }
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+  }
+
+  // ---------- SCREEN SHARE (peer-to-peer WebRTC) ----------
+  // Lets one of you share your actual screen — literally anything (Netflix, a game, any
+  // app) — live to the other, in real time. This is different from the link-based
+  // player above: instead of embedding a website (which sites like Netflix block), this
+  // streams a live video of your own screen directly to their browser.
+  // Free, no paid service: uses Firestore purely to exchange one-time connection info
+  // (like swapping phone numbers), then the actual video/audio flows directly between
+  // your two devices (peer-to-peer), using free public STUN servers for NAT traversal.
+  // Limitations, to be upfront: (1) screen capture is a desktop browser feature —
+  // Chrome/Edge/Firefox on a computer — phones cannot share their screen this way.
+  // (2) without a paid TURN relay server, a very small number of restrictive networks
+  // (strict corporate firewalls, some carrier NATs) may fail to connect directly —
+  // most home wifi-to-wifi connections work fine.
+  function screenShareDocRef(){ return db.collection('nyoyaDiaryScreenShare').doc('session'); }
+  const ICE_SERVERS = { iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]};
+
+  let ssPeerConnection = null;
+  let ssLocalStream = null;
+  let ssRole = null; // 'sharer' | 'viewer' | null
+  let ssProcessedOfferCandidates = 0;
+  let ssProcessedAnswerCandidates = 0;
+  let ssUnsub = null;
+
+  function ssSetStatus(text){
+    const el = document.getElementById('screenshare-status');
+    if(el) el.textContent = text || '';
+  }
+
+  async function startScreenShare(){
+    if(!firebaseReady) return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+      alert('Screen sharing isn\'t available here — it generally only works in a desktop browser (Chrome, Edge, or Firefox) on a computer, not on phones.');
+      return;
+    }
+    try{
+      ssLocalStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    }catch(e){ console.error('getDisplayMedia failed', e); return; }
+
+    ssRole = 'sharer';
+    ssPeerConnection = new RTCPeerConnection(ICE_SERVERS);
+    ssLocalStream.getTracks().forEach(track => ssPeerConnection.addTrack(track, ssLocalStream));
+
+    ssPeerConnection.onicecandidate = (e)=>{
+      if(e.candidate){
+        screenShareDocRef().set({
+          offerCandidates: firebase.firestore.FieldValue.arrayUnion(e.candidate.toJSON())
+        }, { merge: true }).catch(err=> console.error('write offer candidate failed', err));
+      }
+    };
+
+    ssLocalStream.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
+
+    const offer = await ssPeerConnection.createOffer();
+    await ssPeerConnection.setLocalDescription(offer);
+
+    try{
+      await screenShareDocRef().set({
+        offer: { sdp: offer.sdp, type: offer.type },
+        answer: null,
+        offerCandidates: [],
+        answerCandidates: [],
+        active: true,
+        sharedBy: currentUser || 'Someone',
+        startedAt: nowMs()
+      });
+    }catch(e){ console.error('publish offer failed', e); }
+
+    ssProcessedOfferCandidates = 0;
+    ssProcessedAnswerCandidates = 0;
+
+    const preview = document.getElementById('screenshare-local-preview');
+    if(preview){ preview.srcObject = ssLocalStream; preview.style.display = 'block'; }
+    document.getElementById('screenshare-stop-btn').style.display = 'inline-block';
+    document.getElementById('screenshare-start-btn').style.display = 'none';
+    document.getElementById('watch-empty').style.display = 'none';
+    ssSetStatus('Sharing your screen — waiting for them to connect...');
+    logActivity('watch', { text: 'Started sharing their screen' });
+
+    if(ssUnsub) ssUnsub();
+    ssUnsub = screenShareDocRef().onSnapshot(async snap=>{
+      const data = snap.exists ? snap.data() : null;
+      if(!data || !data.active || ssRole !== 'sharer') return;
+      if(data.answer && ssPeerConnection && !ssPeerConnection.currentRemoteDescription){
+        try{
+          await ssPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+          ssSetStatus('Connected — they can see your screen.');
+        }catch(e){ console.error('set remote answer failed', e); }
+      }
+      const answerCandidates = data.answerCandidates || [];
+      for(let i = ssProcessedAnswerCandidates; i < answerCandidates.length; i++){
+        try{ await ssPeerConnection.addIceCandidate(new RTCIceCandidate(answerCandidates[i])); }
+        catch(e){ console.error('add answer candidate failed', e); }
+      }
+      ssProcessedAnswerCandidates = answerCandidates.length;
+    });
+  }
+
+  async function joinScreenShareAsViewer(data){
+    ssRole = 'viewer';
+    ssPeerConnection = new RTCPeerConnection(ICE_SERVERS);
+
+    ssPeerConnection.ontrack = (e)=>{
+      const videoEl = document.getElementById('screenshare-remote-video');
+      if(videoEl && videoEl.srcObject !== e.streams[0]){
+        videoEl.srcObject = e.streams[0];
+        videoEl.style.display = 'block';
+        document.getElementById('watch-iframe').style.display = 'none';
+        document.getElementById('watch-empty').style.display = 'none';
+      }
+    };
+
+    ssPeerConnection.onicecandidate = (e)=>{
+      if(e.candidate){
+        screenShareDocRef().set({
+          answerCandidates: firebase.firestore.FieldValue.arrayUnion(e.candidate.toJSON())
+        }, { merge: true }).catch(err=> console.error('write answer candidate failed', err));
+      }
+    };
+
+    try{
+      await ssPeerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await ssPeerConnection.createAnswer();
+      await ssPeerConnection.setLocalDescription(answer);
+      await screenShareDocRef().set({ answer: { sdp: answer.sdp, type: answer.type } }, { merge: true });
+    }catch(e){ console.error('answer creation failed', e); return; }
+
+    ssProcessedOfferCandidates = 0;
+    ssSetStatus(`Watching ${data.sharedBy || 'their'} screen...`);
+
+    if(ssUnsub) ssUnsub();
+    ssUnsub = screenShareDocRef().onSnapshot(async snap=>{
+      const d = snap.exists ? snap.data() : null;
+      if(!d || !d.active){ stopScreenShareViewer(); return; }
+      const offerCandidates = d.offerCandidates || [];
+      for(let i = ssProcessedOfferCandidates; i < offerCandidates.length; i++){
+        try{ await ssPeerConnection.addIceCandidate(new RTCIceCandidate(offerCandidates[i])); }
+        catch(e){ console.error('add offer candidate failed', e); }
+      }
+      ssProcessedOfferCandidates = offerCandidates.length;
+    });
+  }
+
+  function stopScreenShareViewer(){
+    if(ssPeerConnection){ try{ ssPeerConnection.close(); }catch(e){} ssPeerConnection = null; }
+    const videoEl = document.getElementById('screenshare-remote-video');
+    if(videoEl){ videoEl.srcObject = null; videoEl.style.display = 'none'; }
+    ssRole = null;
+    ssSetStatus('');
+    if(!lastWatchUrl) document.getElementById('watch-empty').style.display = 'flex';
+  }
+
+  async function stopScreenShare(){
+    if(ssLocalStream){ ssLocalStream.getTracks().forEach(t=> t.stop()); ssLocalStream = null; }
+    if(ssPeerConnection){ try{ ssPeerConnection.close(); }catch(e){} ssPeerConnection = null; }
+    const preview = document.getElementById('screenshare-local-preview');
+    if(preview){ preview.srcObject = null; preview.style.display = 'none'; }
+    const stopBtn = document.getElementById('screenshare-stop-btn');
+    const startBtn = document.getElementById('screenshare-start-btn');
+    if(stopBtn) stopBtn.style.display = 'none';
+    if(startBtn) startBtn.style.display = 'inline-block';
+    ssSetStatus('');
+    ssRole = null;
+    if(firebaseReady){
+      try{ await screenShareDocRef().set({ active: false }, { merge: true }); }
+      catch(e){ console.error('stop screenshare write failed', e); }
+    }
+  }
+
+  function listenForIncomingScreenShare(){
+    if(!firebaseReady) return;
+    screenShareDocRef().onSnapshot(snap=>{
+      const data = snap.exists ? snap.data() : null;
+      if(!data || !data.active || !data.offer) return;
+      if(data.sharedBy === currentUser) return; // that's our own share, ignore
+      if(ssRole === 'viewer' || ssRole === 'sharer') return; // already handled
+      joinScreenShareAsViewer(data);
+    });
+  }
+
+  function bindScreenShare(){
+    const startBtn = document.getElementById('screenshare-start-btn');
+    const stopBtn = document.getElementById('screenshare-stop-btn');
+    if(startBtn) startBtn.addEventListener('click', startScreenShare);
+    if(stopBtn) stopBtn.addEventListener('click', stopScreenShare);
+    listenForIncomingScreenShare();
   }
 
   // ---------- WATCH TOGETHER · LIVE COMMENTS ----------
