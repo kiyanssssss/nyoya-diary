@@ -1044,7 +1044,7 @@
 
       <div class="ny-card">
         <div style="display:flex; gap:8px;">
-          <input class="ny-input" id="music-search-input" placeholder="Search a song, or paste a YouTube/Spotify link..." style="margin:0;" />
+          <input class="ny-input" id="music-search-input" placeholder="Search a song or artist, or paste a YouTube link/playlist..." style="margin:0;" />
           <button class="ny-btn" id="music-search-btn" style="margin-top:0; width:auto; padding:9px 16px;">Search</button>
         </div>
         <div id="music-search-results"></div>
@@ -1939,12 +1939,20 @@
   function setupMediaSession(){
     if(mediaSessionSetup || !('mediaSession' in navigator)) return;
     mediaSessionSetup = true;
-    try{
-      navigator.mediaSession.setActionHandler('play', ()=>{ if(!isPlaying) toggleMusicPlay(); });
-      navigator.mediaSession.setActionHandler('pause', ()=>{ if(isPlaying) toggleMusicPlay(); });
-      navigator.mediaSession.setActionHandler('previoustrack', ()=>{ document.getElementById('music-prev-btn').click(); });
-      navigator.mediaSession.setActionHandler('nexttrack', ()=> playNextInQueue());
-    }catch(e){ console.error('media session action setup failed', e); }
+    const setHandler = (action, fn)=>{
+      try{ navigator.mediaSession.setActionHandler(action, fn); }
+      catch(e){ /* some actions (e.g. seekto) aren't supported on every browser — safe to ignore */ }
+    };
+    setHandler('play', ()=>{ if(!isPlaying) toggleMusicPlay(); });
+    setHandler('pause', ()=>{ if(isPlaying) toggleMusicPlay(); });
+    setHandler('previoustrack', ()=>{ document.getElementById('music-prev-btn').click(); });
+    setHandler('nexttrack', ()=> playNextInQueue());
+    setHandler('seekto', (details)=>{
+      if(ytPlayer && ytReady && typeof details.seekTime === 'number'){
+        ytPlayer.seekTo(details.seekTime, true);
+        updateMusicState({ position: details.seekTime });
+      }
+    });
   }
   function updateMediaSession(){
     if(!('mediaSession' in navigator)) return;
@@ -2217,23 +2225,7 @@
   }
 
   async function searchMusic(query){
-    const spotifyId = parseSpotifyInput(query);
-    if(spotifyId){
-      const results = await fetchSpotifyTrack(spotifyId);
-      if(results.length) lastMusicSearchError = null;
-      return results;
-    }
     const linkInfo = parseYouTubeInput(query);
-    // Plain text (not a pasted link) — search Spotify's real catalog first, so picking
-    // a result plays through Spotify (with the "open full song in Spotify app" button).
-    // Falls back to YouTube automatically if Spotify isn't configured or finds nothing.
-    if(!linkInfo){
-      const spotifyResults = await spotifySearchTracks(query);
-      if(spotifyResults && spotifyResults.length){
-        lastMusicSearchError = null;
-        return spotifyResults;
-      }
-    }
     const effectiveKey = getYoutubeApiKey();
     if(!effectiveKey || effectiveKey.indexOf('PASTE_YOUTUBE_API_KEY_HERE') !== -1){
       alert('Add your YouTube Data API key in the code first — see the setup comment near YOUTUBE_API_KEY.');
@@ -3850,12 +3842,15 @@
       if(host === 'drive.google.com'){
         const fileMatch = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
         const fileId = fileMatch ? fileMatch[1] : u.searchParams.get('id');
-        // Drive's own "/preview" iframe has native controls we can't touch at all (cross-origin) —
-        // that's what was putting the seek bar/play button in an odd spot above the video.
-        // A direct-download-style URL streams the raw file instead, so it plays in OUR OWN
-        // <video> element with normal, YouTube-style controls (frame on top, seek bar + play/pause
-        // built into the bottom of the frame) that we fully control.
-        if(fileId) return { kind:'native', src:`https://drive.google.com/uc?export=download&id=${fileId}` };
+        // Drive's direct-download URL (uc?export=download) looks tempting because it would let
+        // us use our own <video> element with normal controls — but Drive doesn't send the
+        // cross-origin headers a <video> tag needs, and for anything but tiny files it redirects
+        // to an HTML "can't scan for viruses" confirmation page instead of the actual video
+        // bytes. That combination made the video not play AT ALL. Drive's own "/preview" iframe
+        // is the one method Google actually supports for embedding, so that's what's used here —
+        // the trade-off is we can't restyle its internal seek bar/play button (cross-origin
+        // iframe; no site can reach into another domain's embedded player and move its controls).
+        if(fileId) return { kind:'iframe', src:`https://drive.google.com/file/d/${fileId}/preview` };
       }
     }catch(e){ /* fall through and use the raw link as-is below */ }
     return { kind:'iframe', src:url };
